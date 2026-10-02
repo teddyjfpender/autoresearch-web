@@ -8,14 +8,13 @@ import type { ReactNode } from "react"
 
 import type { Challenge, ResearchCase, ResearchReview } from "@/data/schema"
 import { summarizeBaseline } from "@/lib/baseline"
-import type { ResearchHighlight as Highlight } from "@/lib/research-summary"
 import { routes } from "@/lib/routes"
 import type { Summary } from "@/lib/scoring"
 
 import { ProgressChart } from "../chart/progress-chart"
 import { RecordCards } from "../records/record-cards"
-import { ResearchHighlight } from "../research/research-highlight"
 import { ResearchComparisonChart } from "../research/research-comparison-chart"
+import { ResearchProgressChart } from "../research/research-progress-chart"
 import { SectionLink } from "../site/section-link"
 import { StageStrip } from "../workload/proof-pipeline"
 import { StatusBadge } from "./status-badge"
@@ -27,13 +26,11 @@ import { StatusBadge } from "./status-badge"
 export function ChallengeHero({
   challenge,
   summary,
-  highlight,
   reviews,
   measurements,
 }: {
   challenge: Challenge
   summary: Summary
-  highlight: Highlight | null
   reviews: readonly ResearchReview[]
   measurements: readonly ResearchCase[]
 }) {
@@ -119,20 +116,20 @@ export function ChallengeHero({
             </dl>
           </Reveal>
         </div>
-        <Reveal delay={0.35}>
-          <p className="mt-6 max-w-4xl leading-relaxed text-fg-muted">{challenge.summary}</p>
+        <Reveal delay={0.35} className="mt-10">
+          <ResearchProgressChart
+            challenge={challenge}
+            reviews={reviews}
+            measurements={measurements}
+          />
+        </Reveal>
+        <Reveal delay={0.4}>
+          <p className="mt-8 max-w-4xl leading-relaxed text-fg-muted">{challenge.summary}</p>
           <div className="mt-5">
             <StageStrip challenge={challenge} />
           </div>
         </Reveal>
-
-        {highlight ? (
-          <Reveal delay={0.4} className="mt-10">
-            <ResearchHighlight highlight={highlight} repositoryUrl={challenge.links.repo} />
-          </Reveal>
-        ) : null}
-
-        <Reveal delay={0.45} className="mt-10">
+        <Reveal delay={0.5} className="mt-6">
           {reviews.some((review) =>
             measurements.some(
               (row) => row.prNumber === review.prNumber && row.headSha === review.headSha,
@@ -144,7 +141,7 @@ export function ChallengeHero({
               measurements={measurements}
             />
           ) : null}
-          {ranked || reviews.length === 0 ? (
+          {ranked ? (
             <ProgressChart
               scored={summary.scored}
               minImprovement={challenge.contract.minImprovement}
