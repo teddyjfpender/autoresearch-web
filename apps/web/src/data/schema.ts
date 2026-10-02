@@ -225,7 +225,7 @@ export const researchReviewSchema = z.object({
   headSha: sha(40),
   patchSha256: sha(64),
   evidenceSha256: sha(64),
-  reviewState: z.enum(["changes_requested", "research_only", "ready_to_judge"]),
+  reviewState: z.enum(["changes_requested", "research_only", "ready_to_judge", "promoted_direct"]),
   publicSamplesPerArm: z.number().int().nonnegative(),
   submissionId: z.string().nullable(),
   qualification: z.string(),

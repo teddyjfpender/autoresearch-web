@@ -10,6 +10,7 @@ const reviewLabel: Record<ResearchReview["reviewState"], string> = {
   changes_requested: "Changes requested",
   research_only: "Research only",
   ready_to_judge: "Queued for judge",
+  promoted_direct: "Promoted H200 research",
 }
 const EMPTY_REVIEWS: readonly ResearchReview[] = []
 
@@ -99,9 +100,9 @@ export function ResearchSection({
             Ideas and patches, <em className="font-display font-normal">in the open.</em>
           </Heading>
           <p className="mt-5 max-w-3xl text-fg-muted">
-            Pull requests and Discussions come from the challenge repository. Performance claims
-            here are the authors&apos; own; they become ranked results only after independent H200
-            judging and a signed receipt.
+            Pull requests and Discussions come from the challenge repository. The measurements below
+            distinguish author reports from independent H200 checks. A ranked result still requires
+            isolated judging and a signed receipt.
           </p>
         </Reveal>
         <div className="mt-12 grid gap-12 lg:grid-cols-2">
@@ -131,6 +132,14 @@ export function ResearchSection({
                   Per-case TSV <ArrowUpRight className="ml-1 inline size-3" />
                 </a>
                 <a
+                  href={`${repositoryUrl}/blob/main/data/reports/submission-h200-runs-2026-10-02.tsv`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-label text-accent hover:underline"
+                >
+                  Per-run H200 TSV <ArrowUpRight className="ml-1 inline size-3" />
+                </a>
+                <a
                   href={`${repositoryUrl}/blob/main/data/reports/submission-pow-primitives-2026-10-02.tsv`}
                   target="_blank"
                   rel="noreferrer"
@@ -141,11 +150,10 @@ export function ResearchSection({
               </div>
             </div>
             <p className="mt-3 max-w-3xl text-sm text-fg-muted">
-              These are public, unsandboxed research runs, not signed scores. Command time is launch
-              to exit; Cairo proof time ends at proof.finish. PR #4 has six observations per arm and
-              paired ratios; its narrower 26-bit PoW call improved while full PIE commands
-              regressed. PR #6 has one unpaired observation per arm, transcribed from its
-              author&apos;s notes.
+              These public, unsandboxed runs are research evidence, not signed scores. Command time
+              is launch to exit; Cairo proof time ends at proof.finish. PR #3 and PR #6 were
+              independently checked on H200 against canonical proofs and Rust verifiers. PR #4
+              retains its author-reported PoW and full-command measurements.
             </p>
             <div className="mt-6 grid gap-4">
               {reviews
@@ -155,7 +163,7 @@ export function ResearchSection({
                   return (
                     <details key={review.prNumber} className="rounded-2xl border border-line p-5">
                       <summary className="cursor-pointer text-label">
-                        PR #{review.prNumber} · {reviewLabel[review.reviewState]} ·{" "}
+                        PR #{review.prNumber} · {reviewLabel[review.reviewState]} · at least{" "}
                         {review.publicSamplesPerArm} sample
                         {review.publicSamplesPerArm === 1 ? "" : "s"} per arm
                       </summary>
