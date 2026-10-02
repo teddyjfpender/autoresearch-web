@@ -218,6 +218,44 @@ export const scorecardSchema = z.object({
   perCase: z.array(caseResultSchema).min(1),
 })
 
+/** Reviewed PR research. These rows are never judge-signed leaderboard entries. */
+export const researchReviewSchema = z.object({
+  prNumber: z.number().int().positive(),
+  title: z.string().min(1),
+  headSha: sha(40),
+  patchSha256: sha(64),
+  evidenceSha256: sha(64),
+  reviewState: z.enum(["changes_requested", "research_only", "ready_to_judge"]),
+  publicSamplesPerArm: z.number().int().nonnegative(),
+  submissionId: z.string().nullable(),
+  qualification: z.string(),
+  validation: z.string().min(1),
+  decision: z.string().min(1),
+})
+
+/** Direct public-run measurements, with their original timing scopes. */
+export const researchCaseSchema = z.object({
+  prNumber: z.number().int().positive(),
+  headSha: sha(40),
+  patchSha256: sha(64),
+  evidenceSha256: sha(64),
+  caseId: z.string().min(1),
+  family: familyIdSchema,
+  qualification: z.string(),
+  samplesPerArm: z.number().int().positive(),
+  timeScope: z.literal("external_command"),
+  proofScope: z.enum(["", "cairo_execute_finish"]),
+  baselineCommandS: z.number().positive(),
+  candidateCommandS: z.number().positive(),
+  medianPairedCommandRatio: z.number().positive().nullable(),
+  baselineProofS: z.number().positive().nullable(),
+  candidateProofS: z.number().positive().nullable(),
+  baselineIngressS: z.number().positive().nullable(),
+  candidateIngressS: z.number().positive().nullable(),
+  baselinePeakGiBRounded: z.number().positive(),
+  candidatePeakGiBRounded: z.number().positive(),
+})
+
 /** Platform-level content: the landing page and shell, independent of any one challenge. */
 export const siteSchema = z.object({
   name: z.string(),
@@ -245,4 +283,6 @@ export type Gate = z.infer<typeof gateSchema>
 export type Challenge = z.infer<typeof challengeSchema>
 export type CaseResult = z.infer<typeof caseResultSchema>
 export type Scorecard = z.infer<typeof scorecardSchema>
+export type ResearchReview = z.infer<typeof researchReviewSchema>
+export type ResearchCase = z.infer<typeof researchCaseSchema>
 export type Site = z.infer<typeof siteSchema>

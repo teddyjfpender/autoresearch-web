@@ -2,7 +2,13 @@ import { Container } from "@autoresearch/ui/components/layout"
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
-import { getChallenge, getChallenges, getScorecards } from "@/data/source"
+import {
+  getChallenge,
+  getChallenges,
+  getResearchCases,
+  getResearchReviews,
+  getScorecards,
+} from "@/data/source"
 import { ChallengeHero } from "@/features/challenge/challenge-hero"
 import { JudgingSection } from "@/features/judging/judging-section"
 import { Leaderboard } from "@/features/leaderboard/leaderboard"
@@ -33,7 +39,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ChallengePage({ params }: Props) {
   const { slug } = await params
-  const [challenge, scorecards] = await Promise.all([getChallenge(slug), getScorecards(slug)])
+  const [challenge, scorecards, reviews, measurements] = await Promise.all([
+    getChallenge(slug),
+    getScorecards(slug),
+    getResearchReviews(slug),
+    getResearchCases(slug),
+  ])
   if (!challenge) notFound()
   const activity = await getResearchActivity(challenge.links.repo)
   const summary = summarize(challenge, scorecards)
@@ -53,6 +64,8 @@ export default async function ChallengePage({ params }: Props) {
       />
       <ResearchSection
         activity={activity}
+        reviews={reviews}
+        measurements={measurements}
         repositoryUrl={challenge.links.repo}
         discussionsUrl={challenge.links.discussions}
       />

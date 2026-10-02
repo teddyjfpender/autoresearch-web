@@ -33,6 +33,7 @@ export interface ResearchItem {
   updatedAt: string
   author: { login: string; avatarUrl: string } | null
   detail: string
+  headSha?: string
 }
 
 export interface ResearchActivity {
@@ -82,6 +83,7 @@ export async function getResearchActivity(repositoryUrl: string): Promise<Resear
           updatedAt: item.updated_at,
           author: item.user ? { login: item.user.login, avatarUrl: item.user.avatar_url } : null,
           detail: item.draft ? "Draft PR" : item.state === "open" ? "Open PR" : "Closed PR",
+          headSha: item.head.sha,
         })) ?? null,
     )
     .catch(() => null)

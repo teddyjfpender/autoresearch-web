@@ -6,6 +6,8 @@
  * Defaults to a sibling checkout. Writes validated JSON to src/data/imported/stwo-cuda/:
  *   contract.json   pinned source, editable paths, hardware, security   (benchmark.json)
  *   cases.json      per-case shape + H200 baseline measurements         (fixture + reports)
+ *   research-reviews.json  frozen PR reviews, not ranked receipts       (review TSV)
+ *   research-cases.json    direct, unranked PR measurements             (research TSV)
  * scorecards.json is left alone: it holds judge-signed rank results once intake is live.
  * Source hashes and machine-local paths are dropped.
  */
@@ -15,7 +17,12 @@ import { fileURLToPath } from "node:url"
 
 import { z } from "zod"
 
-import { caseMeasuredSchema, contractImportedSchema } from "../src/data/schema"
+import {
+  caseMeasuredSchema,
+  contractImportedSchema,
+  researchCaseSchema,
+  researchReviewSchema,
+} from "../src/data/schema"
 
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url))
 const repo = resolve(process.argv[2] ?? here("../../../../stwo-cuda-challenge"))
@@ -27,6 +34,8 @@ const FILES = {
   report: "data/reports/h200-direct-2026-10-02.json",
   summary: "data/reports/h200-direct-2026-10-02-summary.tsv",
   runs: "data/reports/h200-direct-2026-10-02-runs.tsv",
+  reviews: "data/reports/submission-review-2026-10-02.tsv",
+  research: "data/reports/submission-research-2026-10-02.tsv",
 } as const
 
 const readJson = (relative: string): unknown =>
@@ -168,4 +177,66 @@ const cases = fixture.cases.map((testCase) => {
 
 write("contract.json", contract)
 write("cases.json", cases)
-console.log(`Imported contract and ${String(cases.length)} cases from ${repo}`)
+
+// --- reviewed, unranked PR research ---------------------------------------------------------
+
+const reviews = researchReviewSchema.array().parse(
+  readTsv(FILES.reviews).map((row) => ({
+    prNumber: required(row["pr_number"], "review pr_number"),
+    title: row["title"] ?? "",
+    headSha: row["head_sha"] ?? "",
+    patchSha256: row["patch_sha256"] ?? "",
+    evidenceSha256: row["evidence_sha256"] ?? "",
+    reviewState: row["review_state"] ?? "",
+    publicSamplesPerArm: required(row["public_samples_per_arm"], "public_samples_per_arm"),
+    submissionId: row["submission_id"] === "" ? null : (row["submission_id"] ?? null),
+    qualification: row["qualification"] ?? "",
+    validation: row["validation"] ?? "",
+    decision: row["decision"] ?? "",
+  })),
+)
+const researchCases = researchCaseSchema.array().parse(
+  readTsv(FILES.research).map((row) => ({
+    prNumber: required(row["pr_number"], "research pr_number"),
+    headSha: row["head_sha"] ?? "",
+    patchSha256: row["patch_sha256"] ?? "",
+    evidenceSha256: row["evidence_sha256"] ?? "",
+    caseId: row["case_id"] ?? "",
+    family: row["family"] ?? "",
+    qualification: row["qualification"] ?? "",
+    samplesPerArm: required(row["samples_per_arm"], "samples_per_arm"),
+    timeScope: row["time_scope"] ?? "",
+    proofScope: row["proof_scope"] ?? "",
+    baselineCommandS: required(row["baseline_command_s"], "baseline_command_s"),
+    candidateCommandS: required(row["candidate_command_s"], "candidate_command_s"),
+    medianPairedCommandRatio: num(row["median_paired_command_ratio"]),
+    baselineProofS: num(row["baseline_proof_s"]),
+    candidateProofS: num(row["candidate_proof_s"]),
+    baselineIngressS: num(row["baseline_ingress_s"]),
+    candidateIngressS: num(row["candidate_ingress_s"]),
+    baselinePeakGiBRounded: required(row["baseline_peak_gib_rounded"], "baseline_peak_gib_rounded"),
+    candidatePeakGiBRounded: required(
+      row["candidate_peak_gib_rounded"],
+      "candidate_peak_gib_rounded",
+    ),
+  })),
+)
+const reviewIds = new Set(reviews.map((review) => review.prNumber))
+if (reviewIds.size !== reviews.length) throw new Error("Duplicate reviewed PR")
+const researchIds = new Set(researchCases.map((row) => `${String(row.prNumber)}:${row.caseId}`))
+if (researchIds.size !== researchCases.length) throw new Error("Duplicate research case")
+for (const row of researchCases) {
+  const review = reviews.find((item) => item.prNumber === row.prNumber)
+  if (
+    review?.headSha !== row.headSha ||
+    review.patchSha256 !== row.patchSha256 ||
+    review.evidenceSha256 !== row.evidenceSha256 ||
+    !fixture.cases.some((item) => item.id === row.caseId)
+  )
+    throw new Error(`Research row is not bound to a reviewed PR and public case: ${row.caseId}`)
+}
+write("research-reviews.json", reviews)
+write("research-cases.json", researchCases)
+console.log(
+  `Imported contract, ${String(cases.length)} cases and ${String(reviews.length)} reviewed PRs from ${repo}`,
+)

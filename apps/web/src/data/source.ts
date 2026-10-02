@@ -7,15 +7,21 @@ import siteJson from "./content/site.json"
 import stwoCudaCases from "./imported/stwo-cuda/cases.json"
 import stwoCudaContract from "./imported/stwo-cuda/contract.json"
 import stwoCudaScorecards from "./imported/stwo-cuda/scorecards.json"
+import stwoCudaResearchReviews from "./imported/stwo-cuda/research-reviews.json"
+import stwoCudaResearchCases from "./imported/stwo-cuda/research-cases.json"
 import {
   caseMeasuredSchema,
   challengeContentSchema,
   challengeSchema,
   contractImportedSchema,
   scorecardSchema,
+  researchReviewSchema,
+  researchCaseSchema,
   siteSchema,
   type Challenge,
   type Scorecard,
+  type ResearchReview,
+  type ResearchCase,
   type Site,
 } from "./schema"
 
@@ -95,4 +101,16 @@ export const getScorecards = cache(async (slug: string): Promise<readonly Scorec
     .array()
     .parse(entry.scorecards)
     .toSorted((a, b) => Date.parse(a.submittedAt) - Date.parse(b.submittedAt))
+})
+
+export const getResearchReviews = cache(
+  async (slug: string): Promise<readonly ResearchReview[]> => {
+    await Promise.resolve()
+    return slug === "stwo-cuda" ? researchReviewSchema.array().parse(stwoCudaResearchReviews) : []
+  },
+)
+
+export const getResearchCases = cache(async (slug: string): Promise<readonly ResearchCase[]> => {
+  await Promise.resolve()
+  return slug === "stwo-cuda" ? researchCaseSchema.array().parse(stwoCudaResearchCases) : []
 })

@@ -1,0 +1,41 @@
+[
+  {
+    "prNumber": 3,
+    "title": "Count distinct executed PCs instead of re-deriving every instruction tuple",
+    "headSha": "dbbf83896d9b7b6148ef9a4faad92865837e307d",
+    "patchSha256": "517749b426f93205879e9884df259079235772301bbc432bca7e832e187029e5",
+    "evidenceSha256": "1fda3c56b7ca8a4de180f057541aa7a9d035bd357963b239b9ed6ad57ae081b7",
+    "reviewState": "ready_to_judge",
+    "publicSamplesPerArm": 0,
+    "submissionId": "24e342a5d78c14b8973e",
+    "qualification": "none",
+    "validation": "Corrected head applies and passes source policy plus Zig 0.15.2 Cairo CUDA Rust-checkpoint tests 15/15; no H200 run",
+    "decision": "Queued immutable head for H200 smoke; predicted saving remains unmeasured"
+  },
+  {
+    "prNumber": 4,
+    "title": "Research: precompute nonce-independent Blake2s PoW state on CUDA",
+    "headSha": "36e89495817ccefbedbd5d294137351c90456be7",
+    "patchSha256": "79b6f902d6d106bf938042ea5153923b575b86e47607cdc22e5059e505756b79",
+    "evidenceSha256": "4fefc0b18fc7d3be1824c53070d8b9f20c8a223fe6a6aa25c3d649596c0bb148",
+    "reviewState": "research_only",
+    "publicSamplesPerArm": 6,
+    "submissionId": null,
+    "qualification": "direct-unranked-unsandboxed",
+    "validation": "Allowed paths and CUDA closure pass; all 120 submitted observations recompute; six PIE command regressions",
+    "decision": "Retain primitive research; no score or judge queue for this SHA"
+  },
+  {
+    "prNumber": 6,
+    "title": "Overlap authenticated Cairo fixed-asset ingress on H200",
+    "headSha": "d2c86880a68afbd20b4c4699773aaa8f8357f677",
+    "patchSha256": "4815583a5d09c9d3c79dfc4449b21d4c00af1798eaa445666fe6c174497330e1",
+    "evidenceSha256": "e398f0a7e57fcf96318611b20617d0c0b6d11d5b5c1314e5133f66780ba3bbec",
+    "reviewState": "ready_to_judge",
+    "publicSamplesPerArm": 1,
+    "submissionId": "3f5cbe25c0c83453f5a8",
+    "qualification": "author-reported-direct-unranked-unsandboxed",
+    "validation": "Allowed paths and clean apply pass; Cairo package 15 tests and local product check pass; author reports exact public proofs",
+    "decision": "Queued immutable head for trusted judge; no signed rank receipt yet"
+  }
+]

@@ -54,7 +54,11 @@ two folders and validates the result with the zod schemas in `schema.ts`:
   activation gates, FAQ.
 - `imported/` is measured data written by `bun run data:import` from a `stwo-cuda-challenge`
   checkout (default: a sibling directory). It reads `benchmark.json`, `fixtures/public-v1.json`,
-  and the H200 qualification report and TSVs.
+  the H200 qualification report, and the reviewed-PR research TSVs. The latter
+  populate `research-reviews.json` and `research-cases.json`: frozen PR heads,
+  review states, and direct public measurements with their original sample and
+  timing scopes. A changed PR head shows “review pending” until the import is
+  refreshed.
   `scorecards.json` holds derived, signed-rank results and remains empty until
   the first qualified H200 batch is published.
 
@@ -66,6 +70,11 @@ sent to the browser. API failures show a GitHub link instead of pretending
 there is no activity. PR bodies and discussion text are displayed as
 unverified research claims. Staging explicitly suppresses `scorecards.json`
 entries; no PR or Discussion creates a ranked score.
+The direct research table below the PR feed is explicitly unranked: PR #4 has
+six observations per arm, while PR #6 reports one unpaired observation per arm.
+The static review state says #3 and #6 are queued for the judge, not that either
+has a score. PR #3's corrected patch passes its focused test but has no GPU
+after-measurement.
 
 ## Connecting the live challenge
 
