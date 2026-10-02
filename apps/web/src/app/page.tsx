@@ -16,6 +16,8 @@ import { Participate } from "@/features/participate/participate"
 import { summarize } from "@/lib/scoring"
 import { researchHighlight } from "@/lib/research-summary"
 
+export const revalidate = 300
+
 export default async function HomePage() {
   const site = await getSite()
   const [featured, featuredScorecards, challenges] = await Promise.all([
@@ -34,10 +36,16 @@ export default async function HomePage() {
       return { challenge, scorecards, highlight: researchHighlight(reviews, measurements) }
     }),
   )
+  const featuredHighlight =
+    entries.find((entry) => entry.challenge.slug === featured.slug)?.highlight ?? null
 
   return (
     <>
-      <Hero challenge={featured} summary={summarize(featured, featuredScorecards)} />
+      <Hero
+        challenge={featured}
+        summary={summarize(featured, featuredScorecards)}
+        highlight={featuredHighlight}
+      />
       <ChallengeShowcase entries={entries} proposeUrl={featured.links.discussions} />
       <StepsSection
         id="how"

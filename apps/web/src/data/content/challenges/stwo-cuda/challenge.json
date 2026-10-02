@@ -2,8 +2,7 @@
   "slug": "stwo-cuda",
   "name": "Stwo CUDA",
   "headline": "Prove Starknet faster on one H200.",
-  "status": "staging",
-  "summary": "Research targets the CUDA proving stages for Starknet PIEs, wraps, and folds. Direct H200 Cairo proof time is 1.17–1.95 s. The implemented h200-v1 judge currently scores full-command time, so proof-only ranking is still an activation decision.",
+  "summary": "Research targets the CUDA proving stages for Starknet PIEs, wraps, and folds. Direct H200 proof and command timings are shown separately. The implemented h200-v1 judge scores full-command time; proof-only ranking is still an activation decision.",
   "contract": {
     "epoch": "h200-v1",
     "draft": false,
@@ -142,48 +141,6 @@
       "name": "Rank",
       "gpu": true,
       "description": "Fresh A/A calibration and at least three paired ABBA rounds of adapted-input-to-publication time and whole-device peak memory. Every track uses the same measurements; the receipt is signed."
-    }
-  ],
-  "gates": [
-    {
-      "name": "Proof-only scoring contract",
-      "status": "pending",
-      "evidence": "Six Cairo PIE proof-stage timers are retained, but wrap, fold, and pipeline proof-only timers are not. The implemented h200-v1 judge scores adapted-input-to-publication time. A reviewed new epoch, complete timers, and fresh baselines are required before a proof-only leaderboard can launch."
-    },
-    {
-      "name": "Contract and data",
-      "status": "done",
-      "evidence": "All 60 public files hash-verified on a healthy H200; contract CI passes."
-    },
-    {
-      "name": "Independent verifiers",
-      "status": "done",
-      "evidence": "Both pinned Rust verifiers accepted every Cairo proof in two direct H200 rounds."
-    },
-    {
-      "name": "Public proofs and folds",
-      "status": "done",
-      "evidence": "Six PIEs, both folds and both pipeline modes reproduced exact reference hashes on H200."
-    },
-    {
-      "name": "Private holdout",
-      "status": "partial",
-      "evidence": "An 18-case holdout passes hash preflight locally; not yet mounted on a judge."
-    },
-    {
-      "name": "Paired scoring",
-      "status": "partial",
-      "evidence": "Tracks, guards, ABBA, A/A and bootstrap pass scorer tests; no paired H200 rounds yet."
-    },
-    {
-      "name": "Intake and dispatch",
-      "status": "partial",
-      "evidence": "Intake, trusted builder, tiered receipts and signing pass locally; no self-hosted runner is configured."
-    },
-    {
-      "name": "Candidate isolation",
-      "status": "pending",
-      "evidence": "CPU sandbox probe passed; GPU isolation on the actual H200 runner is still to qualify."
     }
   ],
   "participate": [

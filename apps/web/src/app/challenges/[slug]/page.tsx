@@ -53,7 +53,13 @@ export default async function ChallengePage({ params }: Props) {
 
   return (
     <>
-      <ChallengeHero challenge={challenge} summary={summary} highlight={highlight} />
+      <ChallengeHero
+        challenge={challenge}
+        summary={summary}
+        highlight={highlight}
+        reviews={reviews}
+        measurements={measurements}
+      />
       <Leaderboard
         slug={slug}
         scored={summary.scored}

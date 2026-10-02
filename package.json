@@ -9,16 +9,15 @@
   ],
   "scripts": {
     "dev": "bun --filter @autoresearch/web dev",
-    "build": "bun run verify:receipts && bun --filter @autoresearch/web build",
+    "build": "bun --filter @autoresearch/web build",
     "start": "bun --filter @autoresearch/web start",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
     "typecheck": "bun --filter '*' typecheck",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify:receipts": "node scripts/verify-receipts.mjs",
-    "test:receipts": "node scripts/test-verify-receipts.mjs",
-    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test:receipts && bun run verify:receipts"
+    "test:receipts": "bun scripts/test-live-scorecards.mjs",
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test:receipts"
   },
   "devDependencies": {
     "@eslint-react/eslint-plugin": "^5.23.3",

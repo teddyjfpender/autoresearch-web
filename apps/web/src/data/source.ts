@@ -4,19 +4,12 @@ import { cache } from "react"
 
 import stwoCudaContent from "./content/challenges/stwo-cuda/challenge.json"
 import siteJson from "./content/site.json"
-import stwoCudaCases from "./imported/stwo-cuda/cases.json"
-import stwoCudaContract from "./imported/stwo-cuda/contract.json"
-import stwoCudaScorecards from "./imported/stwo-cuda/scorecards.json"
-import stwoCudaResearchReviews from "./imported/stwo-cuda/research-reviews.json"
-import stwoCudaResearchCases from "./imported/stwo-cuda/research-cases.json"
+import { getChallengeRepositoryData } from "./github-challenge"
 import {
   caseMeasuredSchema,
   challengeContentSchema,
   challengeSchema,
   contractImportedSchema,
-  scorecardSchema,
-  researchReviewSchema,
-  researchCaseSchema,
   siteSchema,
   type Challenge,
   type Scorecard,
@@ -28,29 +21,23 @@ import {
 /**
  * The only module that knows where data comes from.
  *
- * - content/   authored copy: names, stage and case descriptions, tracks, rules, gates.
- * - imported/  measured facts from the challenge repository (`bun run data:import`):
- *              contract, per-case baselines, and judge scorecards.
- *
- * To go live against an API, replace these bodies with `fetch` calls; the zod schemas keep
- * validating at the boundary. Register a new challenge by adding both folders below.
+ * - content/   authored copy: names, stage and case descriptions, tracks, rules.
+ * - github-challenge.ts fetches one immutable revision of the challenge repository for
+ *   measured facts, reviewed PRs, and independently checked signed scorecards.
  */
-const CHALLENGES: Record<
-  string,
-  { content: unknown; contract: unknown; cases: unknown; scorecards: unknown }
-> = {
+const CHALLENGES: Record<string, { content: unknown }> = {
   "stwo-cuda": {
     content: stwoCudaContent,
-    contract: stwoCudaContract,
-    cases: stwoCudaCases,
-    scorecards: stwoCudaScorecards,
   },
 }
 
 /** Join authored content with imported measurements; every case must have both. */
-function joinChallenge(entry: (typeof CHALLENGES)[string]): Challenge {
+function joinChallenge(
+  entry: (typeof CHALLENGES)[string],
+  imported: Awaited<ReturnType<typeof getChallengeRepositoryData>>,
+): Challenge {
   const content = challengeContentSchema.parse(entry.content)
-  const contract = contractImportedSchema.parse(entry.contract)
+  const contract = contractImportedSchema.parse(imported.contract)
   if (content.contract.epoch !== contract.contractEpoch)
     throw new Error(
       `Website epoch ${content.contract.epoch} differs from imported challenge ${contract.contractEpoch}`,
@@ -58,7 +45,7 @@ function joinChallenge(entry: (typeof CHALLENGES)[string]): Challenge {
   const measured = new Map(
     caseMeasuredSchema
       .array()
-      .parse(entry.cases)
+      .parse(imported.cases)
       .map((testCase) => [testCase.id, testCase]),
   )
   const cases = content.cases.map((testCase) => {
@@ -70,6 +57,8 @@ function joinChallenge(entry: (typeof CHALLENGES)[string]): Challenge {
   if (unknown.length > 0) throw new Error(`Imported cases without content: ${unknown.join(", ")}`)
   return challengeSchema.parse({
     ...content,
+    status: imported.activation.status,
+    gates: imported.activation.gates,
     contract: { ...content.contract, ...contract },
     cases,
   })
@@ -81,8 +70,8 @@ export const getSite = cache(async (): Promise<Site> => {
 })
 
 export const getChallenges = cache(async (): Promise<readonly Challenge[]> => {
-  await Promise.resolve()
-  return Object.values(CHALLENGES).map(joinChallenge)
+  const imported = await getChallengeRepositoryData()
+  return Object.values(CHALLENGES).map((entry) => joinChallenge(entry, imported))
 })
 
 export const getChallenge = cache(async (slug: string): Promise<Challenge | undefined> => {
@@ -92,25 +81,19 @@ export const getChallenge = cache(async (slug: string): Promise<Challenge | unde
 
 /** Judge-signed rank scorecards, oldest first. Empty until the H200 judge is live. */
 export const getScorecards = cache(async (slug: string): Promise<readonly Scorecard[]> => {
-  await Promise.resolve()
   const entry = CHALLENGES[slug]
   if (!entry) return []
-  const content = challengeContentSchema.parse(entry.content)
-  if (content.status !== "live") return []
-  return scorecardSchema
-    .array()
-    .parse(entry.scorecards)
-    .toSorted((a, b) => Date.parse(a.submittedAt) - Date.parse(b.submittedAt))
+  const imported = await getChallengeRepositoryData()
+  if (imported.activation.status !== "live") return []
+  return imported.scorecards.toSorted(
+    (a, b) => Date.parse(a.submittedAt) - Date.parse(b.submittedAt),
+  )
 })
 
-export const getResearchReviews = cache(
-  async (slug: string): Promise<readonly ResearchReview[]> => {
-    await Promise.resolve()
-    return slug === "stwo-cuda" ? researchReviewSchema.array().parse(stwoCudaResearchReviews) : []
-  },
+export const getResearchReviews = cache(async (slug: string): Promise<readonly ResearchReview[]> =>
+  slug === "stwo-cuda" ? (await getChallengeRepositoryData()).reviews : [],
 )
 
-export const getResearchCases = cache(async (slug: string): Promise<readonly ResearchCase[]> => {
-  await Promise.resolve()
-  return slug === "stwo-cuda" ? researchCaseSchema.array().parse(stwoCudaResearchCases) : []
-})
+export const getResearchCases = cache(async (slug: string): Promise<readonly ResearchCase[]> =>
+  slug === "stwo-cuda" ? (await getChallengeRepositoryData()).researchCases : [],
+)

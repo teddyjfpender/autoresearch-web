@@ -51,7 +51,7 @@
     },
     {
       "question": "What exactly is timed?",
-      "answer": "The intended research target is GPU proof time. The six Cairo PIEs have retained proof-stage timers (1.17–1.95 s); their 6.90–9.78 s full-command times include ingress and publication. The implemented h200-v1 judge still scores full commands, and wrap/fold proof-only timers are missing, so the site remains in staging until a proof-only contract is implemented and qualified."
+      "answer": "The intended research target is GPU proof time. Direct Cairo PIE measurements retain separate proof-stage and full-command timers; the latter includes ingress and publication. The implemented h200-v1 judge scores full commands, while wrap/fold proof-only timers are missing. A proof-only contract must be implemented and qualified before that leaderboard can open."
     },
     {
       "question": "Can I use AI agents?",

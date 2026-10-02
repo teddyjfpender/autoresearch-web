@@ -169,6 +169,8 @@ const challengeBase = {
 /** What lives in content/challenges/<slug>/challenge.json. */
 export const challengeContentSchema = z.object({
   ...challengeBase,
+  status: z.never().optional(),
+  gates: z.never().optional(),
   contract: contractContentSchema,
   cases: z.array(caseContentSchema).min(1),
 })

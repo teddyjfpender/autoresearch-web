@@ -4,27 +4,27 @@ Leaderboard site for the **Stwo CUDA** challenge: optimize the production Cairo 
 circuit-recursion CUDA paths in `stwo-zig` on one H200, from adapted Starknet PIEs to a
 verified recursive root. The contract mirrors `stwo-cuda-challenge` (epoch `h200-v1`).
 
-> Every number on the site is real: the contract and per-case H200 baselines
-> are imported from `stwo-cuda-challenge`. There are no ranked submissions yet; the leaderboard
-> can fill from judge-signed rank receipts only after a receipt importer and
-> public feed are connected. Neither is live yet.
+> Measured values come from the public `stwo-cuda-challenge` repository at one
+> immutable commit per refresh. No ranked submission exists yet. Future rank
+> cards load from its signed public feed and are verified before display.
 
 ## Layout
 
 ```
-apps/web          Next.js 16 app (App Router, RSC, build-time imported submission pages)
+apps/web          Next.js 16 app (App Router, RSC, automatic GitHub data refresh)
   src/app         routes:
                     /                                      landing (hero, challenges, how, participate, faq)
                     /challenges/[slug]                     challenge (chart hero, leaderboard, workload, scoring, judging)
                     /challenges/[slug]/submissions/[id]    scorecard detail (track scores, per-case ratios)
-  src/data        schema.ts (zod), source.ts (the only data adapter)
+  src/data        schema.ts (zod), source.ts (content + GitHub data adapter)
                   content/   authored copy: site.json, challenges/<slug>/challenge.json
-                  imported/  measured data: <slug>/{contract,cases,scorecards}.json
+                  challenge-parser.ts (contract, baseline and research TSV parsing)
+                  github-challenge.ts (immutable GitHub commit and source files)
+                  verify-scorecards.ts (Ed25519 rank receipt checks)
                   src/features    sections: hero, landing, challenge, records, chart, leaderboard, research, workload,
                   scoring, judging, scorecard, how, participate, faq, site (header, footer,
                   nav config, section links, scroll)
   src/lib         routes.ts (every internal URL), scoring, formatting helpers
-  scripts         import-challenge-data.ts (contract and baselines from the repo)
 packages/ui       design system, framework-agnostic (no Next imports, lint-enforced)
   src/styles      tokens.css (every color/radius/font/ease) + globals.css (Tailwind v4 theme)
   src/components  shadcn-style primitives on Radix + cva: button, badge, card, table, tooltip,
@@ -42,25 +42,26 @@ bun install
 bun run dev            # http://localhost:3000
 bun run build
 bun run check          # prettier --check + eslint (0 warnings) + tsc in every package
-cd apps/web && bun run data:import [path/to/stwo-cuda-challenge]  # refresh imported data
 ```
 
 ## Data
 
-`apps/web/src/data/source.ts` is the only module that knows where data comes from. It joins
-two folders and validates the result with the zod schemas in `schema.ts`:
+`apps/web/src/data/source.ts` joins authored content with the repository's
+measured data and validates the result with the zod schemas in `schema.ts`:
 
 - `content/` is authored copy: case titles and descriptions, proof stages, tracks, rules,
-  activation gates, FAQ.
-- `imported/` is measured data written by `bun run data:import` from a `stwo-cuda-challenge`
-  checkout (default: a sibling directory). It reads `benchmark.json`, `fixtures/public-v1.json`,
-  the H200 qualification report, and the reviewed-PR research TSVs. The latter
-  populate `research-reviews.json` and `research-cases.json`: frozen PR heads,
-  review states, and direct public measurements with their original sample and
-  timing scopes. A changed PR head shows “review pending” until the import is
-  refreshed.
-  `scorecards.json` holds derived, signed-rank results and remains empty until
-  the first qualified H200 batch is published.
+  FAQ. Activation status and gates come from the challenge repository.
+- `github-challenge.ts` resolves challenge `main` to one exact commit and fetches
+  `benchmark.json`, activation status, the public fixture manifest, H200 baseline report/TSVs,
+  reviewed-PR research TSVs, and `data/site/scorecards.json` from that commit.
+  The branch ref refreshes every minute; no manual website data import
+  or deploy is needed after a challenge data commit. A changed PR head shows
+  “review pending” until its independent review row is updated in the challenge
+  repository. A missing or inconsistent source file fails the page instead of
+  silently showing stale numbers.
+- Rank cards are checked against their redacted Ed25519 receipts, detached
+  signatures, active contract, and complete public case set before display.
+  The site remains in staging and suppresses ranked cards until activation.
 
 A case missing from either side fails the build. The challenge page now reads the
 latest public PR metadata from the GitHub REST API. When the server has a
@@ -68,14 +69,13 @@ latest public PR metadata from the GitHub REST API. When the server has a
 server refreshes that research feed every five minutes; the token is never
 sent to the browser. API failures show a GitHub link instead of pretending
 there is no activity. PR bodies and discussion text are displayed as
-unverified research claims. Staging explicitly suppresses `scorecards.json`
-entries; no PR or Discussion creates a ranked score.
-The challenge page and home card now feature PR #6's independently checked
-direct H200 result: all six public PIE commands improved by roughly 16–23%,
-while Cairo proof execution was nearly unchanged. Its ten-case per-case table
-is expanded by default and links to the exact review PR and raw measurements.
-PR #6 has three idle-host ABBA rounds with six samples per arm; PR #3 has a
-smaller independent H200 check, while PR #4's data is author-reported.
+unverified research claims. Staging explicitly suppresses ranked scorecards;
+no PR or Discussion creates a ranked score.
+The challenge page and home card feature the promoted direct H200 result. The
+challenge chart can select every reviewed PR with measured cases, including
+research-only regressions; it covers PIE, recursion and pipeline cases. PR #6
+has three idle-host ABBA rounds with six samples per arm; PR #3 has a smaller
+independent H200 check, while PR #4 has author-reported direct research data.
 The PR #6 highlight is explicitly unranked: its equal-family gain is below
 the session's A/A noise threshold, and there is no signed judge receipt.
 
@@ -92,16 +92,16 @@ receipt → website flow. This site needs two independent inputs:
    author avatars, plain-text excerpts, state/category, and Discussion comment
    counts. It links to GitHub for the full history and comments. A dedicated
    read-only GitHub App installation token is preferable to a personal token.
-2. The challenge's `service/site_export.py` now verifies the operator's Ed25519
-   rank receipt against the immutable PR/commit/patch mapping, then stages
-   `scorecards.json`, the redacted receipt, its detached signature, and the
-   public key in this website checkout. Commit that snapshot to this repo to
-   trigger Vercel. `bun run verify:receipts` checks every published signature
-   and signed score again before a build. Never expose the intake bearer
+2. The challenge's `service/site_export.py --challenge-root .` verifies the
+   operator's Ed25519 rank receipt against the immutable PR/commit/patch
+   mapping, then stages `data/site/scorecards.json`, redacted receipts,
+   detached signatures, and the public key in the challenge repository.
+   Commit that snapshot to challenge `main`; this site picks it up automatically
+   and checks every signature and displayed score. Never expose the intake bearer
    token, operator signing key, SQLite state, or private holdouts here.
 
 The challenge is public and has no self-hosted H200 runner, Actions judge
-variables, public intake endpoint, or ranked receipt feed. The website reports
+variables, public intake endpoint, or signed ranked result. The website reports
 the active `h200-v1` implementation accurately, but foregrounds
 the research target: direct Cairo proof-stage times of 1.17–1.95 s. The
 6.90–9.78 s Cairo range is full-command time, including ingress and publication.

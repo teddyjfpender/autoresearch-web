@@ -6,7 +6,7 @@ import { SplitText } from "@autoresearch/ui/motion/split-text"
 import { ChevronRight } from "lucide-react"
 import type { ReactNode } from "react"
 
-import type { Challenge } from "@/data/schema"
+import type { Challenge, ResearchCase, ResearchReview } from "@/data/schema"
 import { summarizeBaseline } from "@/lib/baseline"
 import type { ResearchHighlight as Highlight } from "@/lib/research-summary"
 import { routes } from "@/lib/routes"
@@ -15,6 +15,7 @@ import type { Summary } from "@/lib/scoring"
 import { ProgressChart } from "../chart/progress-chart"
 import { RecordCards } from "../records/record-cards"
 import { ResearchHighlight } from "../research/research-highlight"
+import { ResearchComparisonChart } from "../research/research-comparison-chart"
 import { SectionLink } from "../site/section-link"
 import { StageStrip } from "../workload/proof-pipeline"
 import { StatusBadge } from "./status-badge"
@@ -27,10 +28,14 @@ export function ChallengeHero({
   challenge,
   summary,
   highlight,
+  reviews,
+  measurements,
 }: {
   challenge: Challenge
   summary: Summary
   highlight: Highlight | null
+  reviews: readonly ResearchReview[]
+  measurements: readonly ResearchCase[]
 }) {
   const ranked = summary.ranked > 0
   const { baseline } = summarizeBaseline(challenge)
@@ -128,11 +133,24 @@ export function ChallengeHero({
         ) : null}
 
         <Reveal delay={0.45} className="mt-10">
-          <ProgressChart
-            scored={summary.scored}
-            minImprovement={challenge.contract.minImprovement}
-            baselineDate={challenge.contract.baselineMeasuredAt}
-          />
+          {reviews.some((review) =>
+            measurements.some(
+              (row) => row.prNumber === review.prNumber && row.headSha === review.headSha,
+            ),
+          ) ? (
+            <ResearchComparisonChart
+              challenge={challenge}
+              reviews={reviews}
+              measurements={measurements}
+            />
+          ) : null}
+          {ranked || reviews.length === 0 ? (
+            <ProgressChart
+              scored={summary.scored}
+              minImprovement={challenge.contract.minImprovement}
+              baselineDate={challenge.contract.baselineMeasuredAt}
+            />
+          ) : null}
         </Reveal>
         <div className="mt-4">
           <RecordCards challenge={challenge} summary={summary} />

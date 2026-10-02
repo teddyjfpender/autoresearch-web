@@ -12,13 +12,22 @@ import type { Challenge } from "@/data/schema"
 import { formatScore } from "@/lib/format"
 import { routes } from "@/lib/routes"
 import type { Summary } from "@/lib/scoring"
+import type { ResearchHighlight } from "@/lib/research-summary"
 
 import { StatusBadge } from "../challenge/status-badge"
 import { AgentPromptDialog } from "../participate/agent-prompt-dialog"
 import { SectionLink } from "../site/section-link"
 import { WarpField } from "./warp-field"
 
-export function Hero({ challenge, summary }: { challenge: Challenge; summary: Summary }) {
+export function Hero({
+  challenge,
+  summary,
+  highlight,
+}: {
+  challenge: Challenge
+  summary: Summary
+  highlight: ResearchHighlight | null
+}) {
   const ranked = summary.ranked > 0
   const score = (track: "latency" | "memory" | "balanced") => summary.leaders[track]?.score ?? 1
   const cairo = challenge.cases.flatMap((testCase) =>
@@ -27,10 +36,16 @@ export function Hero({ challenge, summary }: { challenge: Challenge; summary: Su
       : [],
   )
   // Real numbers only: ranked leaders once the judge is live, unranked direct H200 runs before that.
-  const headline = ranked ? score("latency") : Math.min(...cairo)
+  const headline = ranked
+    ? score("latency")
+    : highlight
+      ? highlight.fullBasketGain * 100
+      : Math.min(...cairo)
   const blurb = ranked
     ? "faster adapted-input-to-publication CUDA proving across Cairo proofs, wraps and folds, against the pinned baseline on one H200."
-    : `unranked direct Cairo proof time on one H200: the fastest of ${String(cairo.length)} public cases on pinned stwo-zig. A proof-only ranking still needs wrap and fold timers and a new contract.`
+    : highlight
+      ? `unranked direct inverse-latency gain across PIE, recursion and pipeline cases for PR #${String(highlight.review.prNumber)}. All ${String(highlight.pieCount)} public PIE commands improved by ${String(Math.round(highlight.pieReductionMin * 100))}–${String(Math.round(highlight.pieReductionMax * 100))}%. This is research evidence, not a signed ranked score.`
+      : `unranked direct Cairo proof time on one H200: the fastest of ${String(cairo.length)} public cases on pinned stwo-zig. A proof-only ranking still needs wrap and fold timers and a new contract.`
   const figures = ranked
     ? [
         { label: "Memory leader", value: formatScore(score("memory")), hint: "1 / R_M" },
@@ -43,14 +58,16 @@ export function Hero({ challenge, summary }: { challenge: Challenge; summary: Su
       ]
     : [
         {
-          label: "Public cases",
-          value: formatNumber(challenge.cases.length),
-          hint: "hash-pinned basket",
+          label: highlight ? "PIEs faster" : "Public cases",
+          value: highlight
+            ? `${String(highlight.pieCount)}/${String(challenge.cases.filter((testCase) => testCase.family === "pie").length)}`
+            : formatNumber(challenge.cases.length),
+          hint: highlight ? "whole command" : "hash-pinned basket",
         },
         {
-          label: "Proof stages",
-          value: formatNumber(challenge.stages.length),
-          hint: "Cairo · wrap · fold",
+          label: "Fastest Cairo proof",
+          value: `${Math.min(...cairo).toFixed(2)} s`,
+          hint: "proof phase; near unchanged",
         },
         { label: "Ranked", value: "0", hint: "opens after activation" },
       ]
@@ -89,8 +106,8 @@ export function Hero({ challenge, summary }: { challenge: Challenge; summary: Su
               <p className="text-[clamp(3rem,6.5vw,5.75rem)] leading-[0.85] font-light tracking-[-0.06em] tabular">
                 <NumberTicker
                   value={headline}
-                  fractionDigits={2}
-                  suffix={ranked ? "×" : " s"}
+                  fractionDigits={highlight && !ranked ? 1 : 2}
+                  suffix={ranked ? "×" : highlight ? "%" : " s"}
                   delay={0.6}
                 />
               </p>

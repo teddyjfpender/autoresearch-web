@@ -59,6 +59,12 @@ function ProofShare({ testCase }: { testCase: Case }) {
 
 /** The hash-pinned basket with direct proof timers and separate command diagnostics. */
 export function WorkloadSection({ challenge }: { challenge: Challenge }) {
+  const pies = challenge.cases.filter((testCase) => testCase.family === "pie")
+  const proofTimes = pies.flatMap((testCase) =>
+    testCase.baseline.proofTimeS === null ? [] : [testCase.baseline.proofTimeS],
+  )
+  const commandTimes = pies.map((testCase) => testCase.baseline.commandTimeS)
+  const rounds = Math.max(...challenge.cases.map((testCase) => testCase.baseline.rounds))
   const weights = caseWeights(challenge.cases)
   const { deviceBytes, reserveBytes } = challenge.contract.hardware
   return (
@@ -171,10 +177,12 @@ export function WorkloadSection({ challenge }: { challenge: Challenge }) {
         </div>
 
         <p className="mt-10 text-label">
-          These are medians of two unranked direct H200 runs. Cairo proof-stage times are 1.17–1.95
-          s; the 6.90–9.78 s range includes ingress and publication. Fold and pipeline proof-only
-          timers are unavailable. The implemented h200-v1 judge still scores full-command time;
-          proof-only ranking must wait for a new contract and complete timers.
+          These are medians of {String(rounds)} unranked direct H200 runs. Cairo proof-stage times
+          are {Math.min(...proofTimes).toFixed(2)}–{Math.max(...proofTimes).toFixed(2)} s; the{" "}
+          {Math.min(...commandTimes).toFixed(2)}–{Math.max(...commandTimes).toFixed(2)} s
+          full-command range includes ingress and publication. Fold and pipeline proof-only timers
+          are unavailable. The implemented h200-v1 judge still scores full-command time; proof-only
+          ranking must wait for a new contract and complete timers.
         </p>
       </Container>
     </Section>
