@@ -33,15 +33,11 @@ export function challengeNav(slug: string): NavConfig {
   return {
     back: { label: "All challenges", href: routes.homeSection("challenges") },
     items: [
-      section("overview", "Overview", routes.challengeSection(slug, "overview")),
       section("leaderboard", "Leaderboard", routes.challengeSection(slug, "leaderboard")),
-      section("research", "Research", routes.challengeSection(slug, "research")),
-      section("workload", "Workload", routes.challengeSection(slug, "workload")),
-      section("scoring", "Scoring", routes.challengeSection(slug, "scoring")),
-      section("judging", "Judging", routes.challengeSection(slug, "judging")),
-      section("participate", "Participate", routes.challengeSection(slug, "participate")),
+      section("discussion", "Discussion", routes.challengeSection(slug, "discussion")),
+      section("details", "Details", routes.challengeSection(slug, "details")),
     ],
-    cta: { label: "Start solving", href: routes.challengeSection(slug, "participate") },
+    cta: { label: "Start solving", href: routes.challengeSection(slug, "details") },
   }
 }
 

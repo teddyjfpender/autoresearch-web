@@ -9,15 +9,14 @@ import {
   getResearchReviews,
   getScorecards,
 } from "@/data/source"
+import { ChallengeBoard } from "@/features/board/challenge-board"
+import { ChallengeDetails } from "@/features/board/challenge-details"
+import { DiscussionPanel } from "@/features/board/discussion-panel"
 import { ChallengeHero } from "@/features/challenge/challenge-hero"
-import { JudgingSection } from "@/features/judging/judging-section"
-import { Leaderboard } from "@/features/leaderboard/leaderboard"
-import { Participate } from "@/features/participate/participate"
-import { ResearchSection } from "@/features/research/research-section"
-import { ScoringSection } from "@/features/scoring/scoring-section"
-import { WorkloadSection } from "@/features/workload/workload-section"
-import { summarize } from "@/lib/scoring"
+import { ProgressChart } from "@/features/chart/progress-chart"
+import { buildCandidates } from "@/lib/candidates"
 import { getResearchActivity } from "@/lib/github-research"
+import { summarize } from "@/lib/scoring"
 
 interface Props {
   params: Promise<{ slug: string }>
@@ -48,55 +47,37 @@ export default async function ChallengePage({ params }: Props) {
   if (!challenge) notFound()
   const activity = await getResearchActivity(challenge.links.repo)
   const summary = summarize(challenge, scorecards)
+  const candidates = buildCandidates(challenge, reviews, measurements, activity.pulls)
 
   return (
     <>
-      <ChallengeHero
-        challenge={challenge}
-        summary={summary}
-        reviews={reviews}
-        measurements={measurements}
-      />
-      <Leaderboard
-        slug={slug}
-        scored={summary.scored}
-        tracks={challenge.tracks}
-        minImprovement={challenge.contract.minImprovement}
-        activation={{
-          done: challenge.gates.filter((gate) => gate.status === "done").length,
-          total: challenge.gates.length,
-        }}
-      />
-      <ResearchSection
-        activity={activity}
-        reviews={reviews}
-        measurements={measurements}
-        repositoryUrl={challenge.links.repo}
-        discussionsUrl={challenge.links.discussions}
-      />
-      <WorkloadSection challenge={challenge} />
-      <ScoringSection challenge={challenge} />
-      <JudgingSection challenge={challenge} />
-      <Participate
-        index="07"
-        steps={challenge.participate}
-        rules={challenge.rules}
-        footer={
-          <Container className="mt-10 px-0 sm:px-0 lg:px-0">
-            <p className="text-label">Editable paths in stwo-zig</p>
-            <ul className="mt-4 flex flex-wrap gap-2">
-              {challenge.contract.editablePaths.map((path) => (
-                <li
-                  key={path}
-                  className="rounded-full border border-line px-3 py-1 font-mono text-xs text-fg-muted"
-                >
-                  {path}
-                </li>
-              ))}
-            </ul>
-          </Container>
-        }
-      />
+      <ChallengeHero challenge={challenge} summary={summary} candidates={candidates} />
+      <Container className="pb-24">
+        <ChallengeBoard
+          candidates={candidates}
+          families={challenge.families}
+          tracks={challenge.tracks}
+          timeScope={challenge.contract.timeScope}
+          rankedChart={
+            summary.ranked > 0 ? (
+              <ProgressChart
+                scored={summary.scored}
+                minImprovement={challenge.contract.minImprovement}
+                baselineDate={challenge.contract.baselineMeasuredAt}
+              />
+            ) : null
+          }
+          discussionCount={activity.discussions?.length ?? null}
+          discussion={
+            <DiscussionPanel
+              activity={activity}
+              discussionsUrl={challenge.links.discussions}
+              pullsUrl={`${challenge.links.repo}/pulls`}
+            />
+          }
+          details={<ChallengeDetails challenge={challenge} />}
+        />
+      </Container>
     </>
   )
 }

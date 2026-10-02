@@ -39,13 +39,22 @@ export const stageSchema = z.object({
   baselineTimed: z.boolean(),
 })
 
+/** One eligibility guard: a paired ratio must stay at or below `max`. */
+export const guardSchema = z.object({
+  /** "case": every case's ratio; "aggregate": the weighted R_T / R_M. */
+  scope: z.enum(["case", "aggregate"]),
+  metric: z.enum(["time", "memory"]),
+  max: z.number().positive(),
+})
+
 export const trackSchema = z.object({
   id: trackIdSchema,
   name: z.string(),
   objective: z.string(),
   /** Human-readable score formula, e.g. "1 / R_T". */
   formula: z.string(),
-  guards: z.array(z.string()),
+  /** Eligibility limits on paired ratios; the single source for scoring and display. */
+  guards: z.array(guardSchema),
   why: z.string(),
 })
 
@@ -277,6 +286,7 @@ export type TrackId = z.infer<typeof trackIdSchema>
 export type FamilyId = z.infer<typeof familyIdSchema>
 export type StageId = z.infer<typeof stageIdSchema>
 export type Stage = z.infer<typeof stageSchema>
+export type Guard = z.infer<typeof guardSchema>
 export type Track = z.infer<typeof trackSchema>
 export type Family = z.infer<typeof familySchema>
 export type Case = z.infer<typeof caseSchema>

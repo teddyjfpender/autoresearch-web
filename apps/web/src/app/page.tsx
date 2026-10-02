@@ -14,7 +14,8 @@ import { StepsSection } from "@/features/how/steps-section"
 import { ChallengeShowcase } from "@/features/landing/challenge-showcase"
 import { Participate } from "@/features/participate/participate"
 import { summarize } from "@/lib/scoring"
-import { researchHighlight } from "@/lib/research-summary"
+import { buildCandidates, candidateHighlight } from "@/lib/candidates"
+import { getResearchActivity } from "@/lib/github-research"
 
 export const revalidate = 300
 
@@ -33,7 +34,9 @@ export default async function HomePage() {
         getResearchReviews(challenge.slug),
         getResearchCases(challenge.slug),
       ])
-      return { challenge, scorecards, highlight: researchHighlight(reviews, measurements) }
+      const activity = await getResearchActivity(challenge.links.repo)
+      const candidates = buildCandidates(challenge, reviews, measurements, activity.pulls)
+      return { challenge, scorecards, highlight: candidateHighlight(candidates) }
     }),
   )
   const featuredHighlight =

@@ -18,7 +18,13 @@
       "name": "Latency",
       "objective": "Fastest adapted-input-to-publication time across the PIE, recursion, and pipeline basket.",
       "formula": "1 / R_T",
-      "guards": ["Every case M / M₀ ≤ 1.10"],
+      "guards": [
+        {
+          "scope": "case",
+          "metric": "memory",
+          "max": 1.1
+        }
+      ],
       "why": "Measures the full work needed to publish a proof from an adapted input."
     },
     {
@@ -26,7 +32,18 @@
       "name": "Memory",
       "objective": "Smallest whole-device peak memory, subject to latency guards.",
       "formula": "1 / R_M",
-      "guards": ["Every case T / T₀ ≤ 1.50", "R_T ≤ 1.25"],
+      "guards": [
+        {
+          "scope": "case",
+          "metric": "time",
+          "max": 1.5
+        },
+        {
+          "scope": "aggregate",
+          "metric": "time",
+          "max": 1.25
+        }
+      ],
       "why": "Dense PIEs must fit on one H200; whole-device peak captures transient allocations too."
     },
     {
@@ -34,7 +51,23 @@
       "name": "Balanced",
       "objective": "Best normalized whole-command time × whole-device peak memory trade-off.",
       "formula": "1 / √(R_T · R_M)",
-      "guards": ["Every case T / T₀ ≤ 1.50", "Every case M / M₀ ≤ 1.50", "R_T ≤ 1.25"],
+      "guards": [
+        {
+          "scope": "case",
+          "metric": "time",
+          "max": 1.5
+        },
+        {
+          "scope": "case",
+          "metric": "memory",
+          "max": 1.5
+        },
+        {
+          "scope": "aggregate",
+          "metric": "time",
+          "max": 1.25
+        }
+      ],
       "why": "Explores the Pareto trade-off. A capacity proxy, not a cost claim."
     }
   ],

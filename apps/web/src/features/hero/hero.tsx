@@ -12,7 +12,7 @@ import type { Challenge } from "@/data/schema"
 import { formatScore } from "@/lib/format"
 import { routes } from "@/lib/routes"
 import type { Summary } from "@/lib/scoring"
-import type { ResearchHighlight } from "@/lib/research-summary"
+import type { CandidateHighlight } from "@/lib/candidates"
 
 import { StatusBadge } from "../challenge/status-badge"
 import { AgentPromptDialog } from "../participate/agent-prompt-dialog"
@@ -26,7 +26,7 @@ export function Hero({
 }: {
   challenge: Challenge
   summary: Summary
-  highlight: ResearchHighlight | null
+  highlight: CandidateHighlight | null
 }) {
   const ranked = summary.ranked > 0
   const score = (track: "latency" | "memory" | "balanced") => summary.leaders[track]?.score ?? 1
@@ -44,7 +44,7 @@ export function Hero({
   const blurb = ranked
     ? "faster adapted-input-to-publication CUDA proving across Cairo proofs, wraps and folds, against the pinned baseline on one H200."
     : highlight
-      ? `unranked direct inverse-latency gain across PIE, recursion and pipeline cases for PR #${String(highlight.review.prNumber)}. All ${String(highlight.pieCount)} public PIE commands improved by ${String(Math.round(highlight.pieReductionMin * 100))}–${String(Math.round(highlight.pieReductionMax * 100))}%. This is research evidence, not a signed ranked score.`
+      ? `unranked direct inverse-latency gain across PIE, recursion and pipeline cases for PR #${String(highlight.candidate.prNumber)}. All ${String(highlight.pieCount)} public PIE commands improved by ${String(Math.round(highlight.pieReductionMin * 100))}–${String(Math.round(highlight.pieReductionMax * 100))}%. This is research evidence, not a signed ranked score.`
       : `unranked direct Cairo proof time on one H200: the fastest of ${String(cairo.length)} public cases on pinned stwo-zig. A proof-only ranking still needs wrap and fold timers and a new contract.`
   const figures = ranked
     ? [

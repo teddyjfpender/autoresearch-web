@@ -1,72 +1,97 @@
 import { Badge } from "@autoresearch/ui/components/badge"
+import { Formula } from "@autoresearch/ui/components/formula"
 import { Container } from "@autoresearch/ui/components/layout"
-import { NumberTicker } from "@autoresearch/ui/motion/number-ticker"
+import { formatNumber } from "@autoresearch/ui/lib/format"
 import { Reveal } from "@autoresearch/ui/motion/reveal"
 import { SplitText } from "@autoresearch/ui/motion/split-text"
 import { ChevronRight } from "lucide-react"
-import type { ReactNode } from "react"
 
-import type { Challenge, ResearchCase, ResearchReview } from "@/data/schema"
-import { summarizeBaseline } from "@/lib/baseline"
+import type { Challenge } from "@/data/schema"
+import { formatSeconds } from "@/lib/format"
+import { scoreFor, type Candidate } from "@/lib/candidates"
 import { routes } from "@/lib/routes"
 import type { Summary } from "@/lib/scoring"
 
-import { ProgressChart } from "../chart/progress-chart"
-import { RecordCards } from "../records/record-cards"
-import { ResearchComparisonChart } from "../research/research-comparison-chart"
-import { ResearchProgressChart } from "../research/research-progress-chart"
 import { SectionLink } from "../site/section-link"
-import { StageStrip } from "../workload/proof-pipeline"
 import { StatusBadge } from "./status-badge"
 
 /**
- * Challenge route hero: the leaderboard chart framed by title and stats. It is anchored on the
- * direct H200 reference data, so it reads correctly before the first ranked scorecard exists.
+ * Compact challenge header: identity, one line of context, and four computed figures. The
+ * chart and leaderboard follow directly below in the board.
  */
 export function ChallengeHero({
   challenge,
   summary,
-  reviews,
-  measurements,
+  candidates,
 }: {
   challenge: Challenge
   summary: Summary
-  reviews: readonly ResearchReview[]
-  measurements: readonly ResearchCase[]
+  candidates: readonly Candidate[]
 }) {
-  const ranked = summary.ranked > 0
-  const { baseline } = summarizeBaseline(challenge)
   const gatesDone = challenge.gates.filter((gate) => gate.status === "done").length
-  // Ranked: live track leaders. Before that: the direct H200 reference data, never a placeholder.
-  const stats: { label: string; value: ReactNode }[] = ranked
-    ? [
-        ...challenge.tracks.map((track) => ({
-          label: `${track.name} leader`,
-          value: (
-            <NumberTicker
-              value={summary.leaders[track.id]?.score ?? 1}
-              fractionDigits={3}
-              suffix="×"
-              delay={0.4}
-            />
-          ),
-        })),
-        {
-          label: "Ranked scorecards",
-          value: <NumberTicker value={summary.ranked} delay={0.4} />,
-        },
-      ]
-    : [
-        { label: "Direct Cairo proof stage", value: baseline.cairoRange },
-        { label: "Direct device peak", value: baseline.peakRange },
-        { label: "Ranked submissions", value: "0" },
-        {
-          label: "Activation",
-          value: `${String(gatesDone)} / ${String(challenge.gates.length)} gates`,
-        },
-      ]
+  const seconds = (values: readonly number[]) =>
+    `${formatNumber(Math.min(...values), 2)}–${formatSeconds(Math.max(...values))}`
+
+  // Every figure uses the same timing scope as the scores (the contract's command time), and
+  // compares each candidate with its own paired baseline arm, never the proof stage alone.
+  const fullBasket = candidates
+    .filter((candidate) => candidate.buckets.basket !== null)
+    .toSorted(
+      (a, b) => (scoreFor(b, "latency", "basket") ?? 0) - (scoreFor(a, "latency", "basket") ?? 0),
+    )[0]
+  const cairo = candidates
+    .filter((candidate) => candidate.buckets.pie !== null)
+    .toSorted(
+      (a, b) => (scoreFor(b, "latency", "pie") ?? 0) - (scoreFor(a, "latency", "pie") ?? 0),
+    )[0]
+  const cairoCases = cairo?.cases.filter((item) => item.family === "pie") ?? []
+
+  const stats: { label: string; value: string; hint?: string }[] =
+    summary.ranked > 0
+      ? [
+          ...challenge.tracks.map((track) => ({
+            label: `${track.name} leader`,
+            value: `${formatNumber(summary.leaders[track.id]?.score ?? 1, 3)}×`,
+          })),
+          { label: "Ranked", value: formatNumber(summary.ranked) },
+        ]
+      : [
+          {
+            label: "Best full-basket latency",
+            value: fullBasket
+              ? `${formatNumber(scoreFor(fullBasket, "latency", "basket") ?? 1, 3)}×`
+              : "—",
+            ...(fullBasket ? { hint: `PR #${String(fullBasket.prNumber)} · 1 / R_T` } : {}),
+          },
+          {
+            label: "Best Cairo latency",
+            value: cairo ? `${formatNumber(scoreFor(cairo, "latency", "pie") ?? 1, 3)}×` : "—",
+            ...(cairo ? { hint: `PR #${String(cairo.prNumber)} · Cairo cases` } : {}),
+          },
+          cairoCases.length > 0
+            ? {
+                label: "Cairo command time",
+                value: seconds(cairoCases.map((item) => item.candidateS)),
+                hint: `was ${seconds(cairoCases.map((item) => item.baselineS))} (paired baseline)`,
+              }
+            : {
+                label: "Cairo command time",
+                value: seconds(
+                  challenge.cases
+                    .filter((testCase) => testCase.family === "pie")
+                    .map((testCase) => testCase.baseline.commandTimeS),
+                ),
+                hint: "pinned baseline",
+              },
+          {
+            label: "Activation",
+            value: `${String(gatesDone)} / ${String(challenge.gates.length)}`,
+            hint: `${formatNumber(candidates.length)} reviewed candidates`,
+          },
+        ]
+
   return (
-    <section id="overview" className="relative scroll-mt-24 pt-24 pb-8 sm:pt-28">
+    <section id="overview" className="relative scroll-mt-24 pt-24 pb-10 sm:pt-28">
       <Container>
         <Reveal y={8}>
           <nav aria-label="Breadcrumb">
@@ -90,7 +115,7 @@ export function ChallengeHero({
         </Reveal>
 
         <div className="mt-6 flex flex-wrap items-end justify-between gap-x-12 gap-y-8">
-          <div>
+          <div className="max-w-2xl">
             <Reveal y={8} delay={0.05}>
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge status={challenge.status} />
@@ -98,66 +123,31 @@ export function ChallengeHero({
                 <Badge>{challenge.contract.epoch}</Badge>
               </div>
             </Reveal>
-            <h1 className="mt-5 text-[clamp(2.75rem,6vw,5.75rem)] leading-[0.92] font-normal tracking-[-0.05em]">
+            <h1 className="mt-5 text-[clamp(2.5rem,5vw,4.5rem)] leading-[0.95] font-normal tracking-[-0.05em]">
               <SplitText text={challenge.name} />
             </h1>
+            <Reveal delay={0.2}>
+              <p className="mt-4 leading-relaxed text-fg-muted">{challenge.summary}</p>
+            </Reveal>
           </div>
-          {/* Leader stats sit beside the title so the chart starts higher on the page. */}
           <Reveal delay={0.3}>
-            <dl className="grid grid-cols-2 gap-x-8 gap-y-6 pb-2 sm:grid-cols-4">
+            <dl className="grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-4">
               {stats.map((stat) => (
                 <div key={stat.label} className="border-l border-line pl-4">
                   <dt className="text-label whitespace-nowrap">{stat.label}</dt>
-                  <dd className="mt-1 text-2xl font-light tracking-tight whitespace-nowrap tabular sm:text-3xl">
+                  <dd className="mt-1 text-2xl font-light tracking-tight whitespace-nowrap tabular">
                     {stat.value}
                   </dd>
+                  {stat.hint === undefined ? null : (
+                    <dd className="mt-0.5 text-xs whitespace-nowrap text-fg-faint">
+                      <Formula>{stat.hint}</Formula>
+                    </dd>
+                  )}
                 </div>
               ))}
             </dl>
           </Reveal>
         </div>
-        <Reveal delay={0.35} className="mt-10">
-          <ResearchProgressChart
-            challenge={challenge}
-            reviews={reviews}
-            measurements={measurements}
-          />
-        </Reveal>
-        <Reveal delay={0.4}>
-          <p className="mt-8 max-w-4xl leading-relaxed text-fg-muted">{challenge.summary}</p>
-          <div className="mt-5">
-            <StageStrip challenge={challenge} />
-          </div>
-        </Reveal>
-        <Reveal delay={0.5} className="mt-6">
-          {reviews.some((review) =>
-            measurements.some(
-              (row) => row.prNumber === review.prNumber && row.headSha === review.headSha,
-            ),
-          ) ? (
-            <ResearchComparisonChart
-              challenge={challenge}
-              reviews={reviews}
-              measurements={measurements}
-            />
-          ) : null}
-          {ranked ? (
-            <ProgressChart
-              scored={summary.scored}
-              minImprovement={challenge.contract.minImprovement}
-              baselineDate={challenge.contract.baselineMeasuredAt}
-            />
-          ) : null}
-        </Reveal>
-        <div className="mt-4">
-          <RecordCards challenge={challenge} summary={summary} />
-        </div>
-        <p className="mt-6 text-label">
-          Scores are relative to the pinned baseline (1.000×), higher is better.{" "}
-          {ranked
-            ? "Every entry is a judge-signed rank receipt."
-            : `Direct reference: stwo-zig ${challenge.contract.sourceCommit.slice(0, 8)}, measured ${baseline.measured} on ${challenge.contract.hardware.gpu} (${String(baseline.rounds)} unranked direct runs). Ranking opens when the H200 judge is activated, ${String(gatesDone)} of ${String(challenge.gates.length)} gates done.`}
-        </p>
       </Container>
     </section>
   )

@@ -8,7 +8,7 @@ import { ArrowUpRight, Plus } from "lucide-react"
 import type { Challenge, Scorecard } from "@/data/schema"
 import { formatScore, formatSeconds } from "@/lib/format"
 import { routes } from "@/lib/routes"
-import type { ResearchHighlight } from "@/lib/research-summary"
+import type { CandidateHighlight } from "@/lib/candidates"
 import { summarize } from "@/lib/scoring"
 
 import { StatusBadge } from "../challenge/status-badge"
@@ -18,7 +18,7 @@ import { Sparkline } from "./sparkline"
 export interface ShowcaseEntry {
   challenge: Challenge
   scorecards: readonly Scorecard[]
-  highlight: ResearchHighlight | null
+  highlight: CandidateHighlight | null
 }
 
 function ChallengeCard({ challenge, scorecards, highlight }: ShowcaseEntry) {
@@ -65,7 +65,7 @@ function ChallengeCard({ challenge, scorecards, highlight }: ShowcaseEntry) {
             {highlight ? (
               <p className="mt-5 max-w-md border-l-2 border-accent pl-4 text-sm text-fg-muted">
                 <span className="text-accent">
-                  PR #{highlight.review.prNumber} · direct H200 research:
+                  PR #{highlight.candidate.prNumber} · direct H200 research:
                 </span>{" "}
                 all {highlight.pieCount} public PIEs cut full-command time by{" "}
                 {Math.round(highlight.pieReductionMin * 100)}–
