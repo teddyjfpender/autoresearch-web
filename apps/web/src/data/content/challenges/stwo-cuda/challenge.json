@@ -146,17 +146,17 @@
   "participate": [
     {
       "title": "Check data and set up",
-      "body": "Pull public inputs and verify hashes, then run setup. It creates the ignored editable prover checkout at ./workspace/stwo-zig/ (singular workspace), which is absent from a fresh clone and from GitHub.",
+      "body": "Pull public inputs and verify hashes, then run setup. It creates the ignored editable prover checkout at ./workspace/stwo-zig/ (singular workspace) with the accepted source frontier applied. The checkout is absent from a fresh clone and from GitHub.",
       "command": "git lfs pull && python3 challenge.py check-data && python3 challenge.py setup"
     },
     {
       "title": "Edit the CUDA paths",
-      "body": "Run python3 challenge.py paths to find the generated checkout. Edit only the five CUDA directories in benchmark.json; spec/CODE_MAP.md names exact entry files for Cairo, wrap, fold, runtime, and publication. CPU, Metal, and Rust are read-only references.",
+      "body": "Run python3 challenge.py paths to find the generated checkout. Build on the reviewed frontier and edit only the five CUDA directories in benchmark.json; spec/CODE_MAP.md names exact entry files for Cairo, wrap, fold, runtime, and publication. CPU, Metal, and Rust are read-only references.",
       "command": "python3 challenge.py paths"
     },
     {
       "title": "Capture the patch",
-      "body": "Writes candidate/changes.patch and refreshes the derived CUDA manifests. Update candidate/NOTES.md with the mechanism, focused checks and measurements.",
+      "body": "Writes a cumulative candidate/changes.patch against the original source pin, including the accepted frontier, and refreshes derived CUDA manifests. Update candidate/NOTES.md with the mechanism, focused checks and measurements.",
       "command": "python3 challenge.py capture"
     },
     {

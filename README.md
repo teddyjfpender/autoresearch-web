@@ -71,9 +71,10 @@ sent to the browser. API failures show a GitHub link instead of pretending
 there is no activity. PR bodies and discussion text are displayed as
 unverified research claims. Staging explicitly suppresses ranked scorecards;
 no PR or Discussion creates a ranked score.
-The challenge page and home card feature the promoted direct H200 result. The
-challenge chart can select every reviewed PR with measured cases, including
-research-only regressions; it covers PIE, recursion and pipeline cases. PR #6
+The challenge page leads with an unranked research progression line: one
+six-PIE trend for every measured PR and one full-basket trend only when all ten
+cases were measured. A separate chart can select every reviewed PR, including
+research-only regressions, and compare PIE, recursion and pipeline cases. PR #6
 has three idle-host ABBA rounds with six samples per arm; PR #3 has a smaller
 independent H200 check, while PR #4 has author-reported direct research data.
 The PR #6 highlight is explicitly unranked: its equal-family gain is below
