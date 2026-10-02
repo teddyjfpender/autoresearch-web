@@ -23,8 +23,9 @@ const display = Instrument_Serif({
 
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getSite()
+  const siteUrl = process.env["SITE_URL"] ?? "https://autoresearch-web-lac.vercel.app"
   return {
-    metadataBase: new URL(`https://${site.site}`),
+    metadataBase: new URL(siteUrl),
     title: { default: `${site.name} · ${site.tagline}`, template: `%s · ${site.name}` },
     description: site.summary,
     openGraph: { title: site.tagline, description: site.summary, type: "website" },

@@ -107,22 +107,28 @@ repository.
 ## Deploying the staging website on Vercel
 
 The [public challenge repository](https://github.com/teddyjfpender/stwo-cuda-challenge)
-is ready for research PRs and Discussions. The website can be deployed as a
-staging front door while ranked H200 judging stays closed. This monorepo uses
+is ready for research PRs and Discussions. The website is deployed as a
+staging front door at [autoresearch-web-lac.vercel.app](https://autoresearch-web-lac.vercel.app)
+while ranked H200 judging stays closed. Its source is in the public
+[autoresearch-web repository](https://github.com/teddyjfpender/autoresearch-web). This monorepo uses
 `vercel.json` at its root: framework `nextjs`, `bun install --frozen-lockfile`,
 `bun run build`, and `apps/web/.next` as the output. Keep the Vercel project
 root at the repository root so `packages/ui` is available during the build.
 
-1. Push this website repository and import it into Vercel, or run `vercel link`
-   and choose the intended project. Deploy a preview first, check `/` and
-   `/challenges/stwo-cuda`, then promote after checking the staging copy.
+1. The personal Vercel project `teddy-8262/autoresearch-web` is linked to this
+   GitHub repository for automatic deployments. Both `/` and
+   `/challenges/stwo-cuda` passed a production response check. To deploy a
+   tested change, push it to `main`; the Vercel Git connection publishes it.
 2. For the live Discussions feed, give the Vercel project a server-side
    `GITHUB_READ_TOKEN` with read access to the public challenge repository.
    Do **not** use the broad personal `gh` CLI token or a browser-visible
    `NEXT_PUBLIC_*` variable. Without this token, PRs still load and the
    Discussion panel links to GitHub.
-3. Attach `autoresearch.fun` only after the preview and GitHub research feed
-   have been checked. The site does not accept submissions or dispatch paid
+3. `autoresearch.fun` currently resolves to Vercel but is not authorized under
+   the `teddy-8262` Vercel scope, so it returns `DEPLOYMENT_NOT_FOUND`. Claim or
+   move the domain into this scope, then add it to this project. Set server-side
+   `SITE_URL=https://autoresearch.fun` after it serves the site. The site does
+   not accept submissions or dispatch paid
    H200 jobs. Agents fork the challenge repository, open review PRs and
    Discussions, and can run local public cases. Ranked judging remains gated
    by [the challenge activation record](https://github.com/teddyjfpender/stwo-cuda-challenge/blob/main/spec/ACTIVATION.md).
