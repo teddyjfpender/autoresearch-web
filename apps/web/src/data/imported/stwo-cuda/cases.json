@@ -1,0 +1,156 @@
+[
+  {
+    "id": "pie:15582797_15582797",
+    "family": "pie",
+    "blocks": [15582797, 15582797],
+    "osSteps": 20848320,
+    "baseline": {
+      "proofTimeS": 1.2826,
+      "runProofTimesS": [1.2801, 1.285],
+      "proofTimeScope": "CUDA proof execute → proof.finish",
+      "arenaBytes": 88627473376,
+      "commandTimeS": 7.6277,
+      "ingressS": 5.8014,
+      "peakBytes": 90498269184,
+      "rounds": 2
+    }
+  },
+  {
+    "id": "pie:15603744_15603744",
+    "family": "pie",
+    "blocks": [15603744, 15603744],
+    "osSteps": 22219995,
+    "baseline": {
+      "proofTimeS": 1.2239,
+      "runProofTimesS": [1.2239, 1.2239],
+      "proofTimeScope": "CUDA proof execute → proof.finish",
+      "arenaBytes": 87875021696,
+      "commandTimeS": 7.5023,
+      "ingressS": 5.7612,
+      "peakBytes": 89726517248,
+      "rounds": 2
+    }
+  },
+  {
+    "id": "pie:15581148_15581148",
+    "family": "pie",
+    "blocks": [15581148, 15581148],
+    "osSteps": 18809789,
+    "baseline": {
+      "proofTimeS": 1.1728,
+      "runProofTimesS": [1.1727, 1.1729],
+      "proofTimeScope": "CUDA proof execute → proof.finish",
+      "arenaBytes": 82697758816,
+      "commandTimeS": 6.9018,
+      "ingressS": 5.2257,
+      "peakBytes": 84559134720,
+      "rounds": 2
+    }
+  },
+  {
+    "id": "pie:15590913_15590913",
+    "family": "pie",
+    "blocks": [15590913, 15590913],
+    "osSteps": 22673315,
+    "baseline": {
+      "proofTimeS": 1.5467,
+      "runProofTimesS": [1.5466, 1.5468],
+      "proofTimeScope": "CUDA proof execute → proof.finish",
+      "arenaBytes": 103366794272,
+      "commandTimeS": 7.7789,
+      "ingressS": 5.6749,
+      "peakBytes": 105228664832,
+      "rounds": 2
+    }
+  },
+  {
+    "id": "pie:15588777_15588780",
+    "family": "pie",
+    "blocks": [15588777, 15588780],
+    "osSteps": 33679033,
+    "baseline": {
+      "proofTimeS": 1.9515,
+      "runProofTimesS": [1.9534, 1.9497],
+      "proofTimeScope": "CUDA proof execute → proof.finish",
+      "arenaBytes": 132228586352,
+      "commandTimeS": 9.7811,
+      "ingressS": 7.1892,
+      "peakBytes": 134085476352,
+      "rounds": 2
+    }
+  },
+  {
+    "id": "pie:15591789_15591789",
+    "family": "pie",
+    "blocks": [15591789, 15591789],
+    "osSteps": 25379487,
+    "baseline": {
+      "proofTimeS": 1.6751,
+      "runProofTimesS": [1.6753, 1.6748],
+      "proofTimeScope": "CUDA proof execute → proof.finish",
+      "arenaBytes": 114411804960,
+      "commandTimeS": 8.5791,
+      "ingressS": 6.3018,
+      "peakBytes": 116268072960,
+      "rounds": 2
+    }
+  },
+  {
+    "id": "recursion:two-leaf-wrap-fold",
+    "family": "recursion",
+    "leaves": 2,
+    "baseline": {
+      "proofTimeS": null,
+      "runProofTimesS": [],
+      "proofTimeScope": "Pending: the 2.35 s fold stage includes host construction; resident proof timers weren't retained",
+      "arenaBytes": 28132566560,
+      "commandTimeS": 2.8953,
+      "peakBytes": 29418717184,
+      "rounds": 2
+    }
+  },
+  {
+    "id": "recursion:eight-distinct-pie-fold",
+    "family": "recursion",
+    "leaves": 8,
+    "baseline": {
+      "proofTimeS": null,
+      "runProofTimesS": [],
+      "proofTimeScope": "Pending: the 7.35 s fold stage includes host construction; resident proof timers weren't retained",
+      "arenaBytes": 28132566560,
+      "commandTimeS": 7.9045,
+      "peakBytes": 29418717184,
+      "rounds": 2
+    }
+  },
+  {
+    "id": "pipeline:two-leaf-root",
+    "family": "pipeline",
+    "leaves": 2,
+    "mode": "serial",
+    "baseline": {
+      "proofTimeS": null,
+      "runProofTimesS": [],
+      "proofTimeScope": "Pending: Cairo leaf proofs took 0.93 s; wrap and fold proof times weren't retained",
+      "arenaBytes": 39429769536,
+      "commandTimeS": 18.4423,
+      "peakBytes": 69461737472,
+      "rounds": 2
+    }
+  },
+  {
+    "id": "pipeline:two-leaf-batch-integrated",
+    "family": "pipeline",
+    "leaves": 2,
+    "mode": "batch_integrated",
+    "baseline": {
+      "proofTimeS": null,
+      "runProofTimesS": [],
+      "proofTimeScope": "Pending: Cairo leaf proofs took 0.77 s; wrap and fold proof times weren't retained",
+      "arenaBytes": 39429769536,
+      "commandTimeS": 14.0368,
+      "peakBytes": 41307471872,
+      "rounds": 2
+    }
+  }
+]

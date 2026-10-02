@@ -1,0 +1,25 @@
+@import "@autoresearch/ui/styles/globals.css";
+
+@source "../";
+
+/* App-level font wiring: next/font exposes these variables on <html>. */
+:root {
+  --ar-font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --ar-font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --ar-font-display: var(--font-instrument-serif), ui-serif, Georgia, serif;
+}
+
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 450ms;
+  animation-timing-function: var(--ar-ease-out-expo);
+}

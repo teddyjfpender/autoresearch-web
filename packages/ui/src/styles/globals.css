@@ -1,0 +1,186 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+/* Scan the library's own sources so consumers get every utility it uses. */
+@source "../";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme inline {
+  --color-bg: var(--ar-bg);
+  --color-bg-raised: var(--ar-bg-raised);
+  --color-surface: var(--ar-surface);
+  --color-surface-strong: var(--ar-surface-strong);
+  --color-line: var(--ar-line);
+  --color-line-strong: var(--ar-line-strong);
+  --color-fg: var(--ar-fg);
+  --color-fg-muted: var(--ar-fg-muted);
+  --color-fg-faint: var(--ar-fg-faint);
+  --color-accent: var(--ar-accent);
+  --color-accent-strong: var(--ar-accent-strong);
+  --color-accent-fg: var(--ar-accent-fg);
+  --color-accent-soft: var(--ar-accent-soft);
+  --color-heat: var(--ar-heat);
+  --color-heat-soft: var(--ar-heat-soft);
+  --color-good: var(--ar-good);
+  --color-bad: var(--ar-bad);
+
+  --font-sans: var(--ar-font-sans);
+  --font-mono: var(--ar-font-mono);
+  --font-display: var(--ar-font-display);
+
+  --radius-sm: calc(var(--ar-radius) * 0.5);
+  --radius-md: calc(var(--ar-radius) * 0.75);
+  --radius-lg: var(--ar-radius);
+  --radius-xl: calc(var(--ar-radius) * 1.5);
+  --radius-2xl: calc(var(--ar-radius) * 2);
+
+  --ease-out-expo: var(--ar-ease-out-expo);
+  --ease-in-out-quart: var(--ar-ease-in-out-quart);
+  --ease-spring: var(--ar-ease-spring);
+
+  --animate-marquee: marquee var(--marquee-duration, 40s) linear infinite;
+  --animate-pulse-dot: pulse-dot 3.2s ease-in-out infinite;
+  --animate-shimmer: shimmer 2.4s linear infinite;
+  --animate-pop-in: pop-in 260ms var(--ar-ease-out-expo);
+  --animate-accordion-down: accordion-down 450ms var(--ar-ease-out-expo);
+  --animate-accordion-up: accordion-up 300ms var(--ar-ease-out-expo);
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+      opacity: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+      opacity: 1;
+    }
+  }
+
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+      opacity: 0;
+    }
+  }
+
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: scale(0.94) translateY(2px);
+    }
+  }
+
+  @keyframes marquee {
+    from {
+      transform: translate3d(0, 0, 0);
+    }
+    to {
+      transform: translate3d(-50%, 0, 0);
+    }
+  }
+
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    border-color: var(--color-line);
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  ::selection {
+    background-color: var(--color-accent);
+    color: var(--color-accent-fg);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@utility text-balance-pretty {
+  text-wrap: balance;
+}
+
+/* Small quiet metadata label. Change the site's "label voice" here, once. */
+@utility text-label {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  letter-spacing: 0.005em;
+  font-weight: 400;
+  color: var(--color-fg-faint);
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+@utility grain {
+  position: relative;
+  isolation: isolate;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    pointer-events: none;
+    opacity: var(--ar-grain-opacity);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+}
+
+@utility mask-fade-x {
+  mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+}
+
+@utility mask-fade-b {
+  mask-image: linear-gradient(to bottom, black 60%, transparent);
+}
