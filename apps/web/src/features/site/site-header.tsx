@@ -11,6 +11,8 @@ import { useEffect, useMemo, useState } from "react"
 
 import { routes } from "@/lib/routes"
 
+import { AgentPromptDialog } from "../participate/agent-prompt-dialog"
+
 import { Logo } from "./logo"
 import { navFor, type NavItem } from "./nav"
 import { SectionLink } from "./section-link"
@@ -45,7 +47,15 @@ function useActiveSection(items: readonly NavItem[], pathname: string): string |
   return state?.pathname === pathname ? state.id : null
 }
 
-export function SiteHeader({ name, featuredSlug }: { name: string; featuredSlug: string }) {
+export function SiteHeader({
+  name,
+  featuredSlug,
+  repositoryUrl,
+}: {
+  name: string
+  featuredSlug: string
+  repositoryUrl: string
+}) {
   const pathname = usePathname()
   const nav = useMemo(() => navFor(pathname, featuredSlug), [pathname, featuredSlug])
   const { scrollY } = useScroll()
@@ -124,6 +134,7 @@ export function SiteHeader({ name, featuredSlug }: { name: string; featuredSlug:
 
         <div className="flex items-center gap-1">
           <ThemeToggle />
+          <AgentPromptDialog repositoryUrl={repositoryUrl} />
           <Button asChild size="sm" className="hidden h-10 px-4 sm:inline-flex">
             <SectionLink href={nav.cta.href}>
               {nav.cta.label}

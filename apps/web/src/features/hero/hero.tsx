@@ -14,6 +14,7 @@ import { routes } from "@/lib/routes"
 import type { Summary } from "@/lib/scoring"
 
 import { StatusBadge } from "../challenge/status-badge"
+import { AgentPromptDialog } from "../participate/agent-prompt-dialog"
 import { SectionLink } from "../site/section-link"
 import { WarpField } from "./warp-field"
 
@@ -124,6 +125,7 @@ export function Hero({ challenge, summary }: { challenge: Challenge; summary: Su
                 </SectionLink>
               </Button>
             </Magnetic>
+            <AgentPromptDialog repositoryUrl={challenge.links.repo} size="lg" />
             <Magnetic>
               <Button asChild size="lg" variant="ghost">
                 <SectionLink href={routes.challengeSection(challenge.slug, "leaderboard")}>

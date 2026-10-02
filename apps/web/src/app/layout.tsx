@@ -40,6 +40,8 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const [site, challenges] = await Promise.all([getSite(), getChallenges()])
+  const featured = challenges.find((challenge) => challenge.slug === site.featuredChallenge)
+  if (!featured) throw new Error("Featured challenge is missing")
   return (
     <html
       lang="en"
@@ -60,7 +62,11 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           >
             Skip to content
           </a>
-          <SiteHeader name={site.name} featuredSlug={site.featuredChallenge} />
+          <SiteHeader
+            name={site.name}
+            featuredSlug={site.featuredChallenge}
+            repositoryUrl={featured.links.repo}
+          />
           <main id="main">{children}</main>
           <SiteFooter site={site} challenges={challenges} />
         </TooltipProvider>
