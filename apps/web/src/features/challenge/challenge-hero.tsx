@@ -8,11 +8,13 @@ import type { ReactNode } from "react"
 
 import type { Challenge } from "@/data/schema"
 import { summarizeBaseline } from "@/lib/baseline"
+import type { ResearchHighlight as Highlight } from "@/lib/research-summary"
 import { routes } from "@/lib/routes"
 import type { Summary } from "@/lib/scoring"
 
 import { ProgressChart } from "../chart/progress-chart"
 import { RecordCards } from "../records/record-cards"
+import { ResearchHighlight } from "../research/research-highlight"
 import { SectionLink } from "../site/section-link"
 import { StageStrip } from "../workload/proof-pipeline"
 import { StatusBadge } from "./status-badge"
@@ -21,7 +23,15 @@ import { StatusBadge } from "./status-badge"
  * Challenge route hero: the leaderboard chart framed by title and stats. It is anchored on the
  * direct H200 reference data, so it reads correctly before the first ranked scorecard exists.
  */
-export function ChallengeHero({ challenge, summary }: { challenge: Challenge; summary: Summary }) {
+export function ChallengeHero({
+  challenge,
+  summary,
+  highlight,
+}: {
+  challenge: Challenge
+  summary: Summary
+  highlight: Highlight | null
+}) {
   const ranked = summary.ranked > 0
   const { baseline } = summarizeBaseline(challenge)
   const gatesDone = challenge.gates.filter((gate) => gate.status === "done").length
@@ -110,6 +120,12 @@ export function ChallengeHero({ challenge, summary }: { challenge: Challenge; su
             <StageStrip challenge={challenge} />
           </div>
         </Reveal>
+
+        {highlight ? (
+          <Reveal delay={0.4} className="mt-10">
+            <ResearchHighlight highlight={highlight} repositoryUrl={challenge.links.repo} />
+          </Reveal>
+        ) : null}
 
         <Reveal delay={0.45} className="mt-10">
           <ProgressChart

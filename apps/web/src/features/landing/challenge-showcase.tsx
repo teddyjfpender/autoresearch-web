@@ -8,6 +8,7 @@ import { ArrowUpRight, Plus } from "lucide-react"
 import type { Challenge, Scorecard } from "@/data/schema"
 import { formatScore, formatSeconds } from "@/lib/format"
 import { routes } from "@/lib/routes"
+import type { ResearchHighlight } from "@/lib/research-summary"
 import { summarize } from "@/lib/scoring"
 
 import { StatusBadge } from "../challenge/status-badge"
@@ -17,9 +18,10 @@ import { Sparkline } from "./sparkline"
 export interface ShowcaseEntry {
   challenge: Challenge
   scorecards: readonly Scorecard[]
+  highlight: ResearchHighlight | null
 }
 
-function ChallengeCard({ challenge, scorecards }: ShowcaseEntry) {
+function ChallengeCard({ challenge, scorecards, highlight }: ShowcaseEntry) {
   const summary = summarize(challenge, scorecards)
   const ranked = summary.ranked > 0
   const cairoTimes = challenge.cases.flatMap((testCase) =>
@@ -60,6 +62,16 @@ function ChallengeCard({ challenge, scorecards }: ShowcaseEntry) {
               {challenge.name}
             </h3>
             <p className="mt-4 max-w-md text-fg-muted">{challenge.summary}</p>
+            {highlight ? (
+              <p className="mt-5 max-w-md border-l-2 border-accent pl-4 text-sm text-fg-muted">
+                <span className="text-accent">
+                  PR #{highlight.review.prNumber} · direct H200 research:
+                </span>{" "}
+                all {highlight.pieCount} public PIEs cut full-command time by{" "}
+                {Math.round(highlight.pieReductionMin * 100)}–
+                {Math.round(highlight.pieReductionMax * 100)}%. Unranked.
+              </p>
+            ) : null}
           </div>
           <dl className="mt-auto grid grid-cols-3 gap-4 border-t border-line pt-6">
             {stats.map((stat) => (

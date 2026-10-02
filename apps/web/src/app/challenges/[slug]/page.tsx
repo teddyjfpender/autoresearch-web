@@ -18,6 +18,7 @@ import { ScoringSection } from "@/features/scoring/scoring-section"
 import { WorkloadSection } from "@/features/workload/workload-section"
 import { summarize } from "@/lib/scoring"
 import { getResearchActivity } from "@/lib/github-research"
+import { researchHighlight } from "@/lib/research-summary"
 
 interface Props {
   params: Promise<{ slug: string }>
@@ -48,10 +49,11 @@ export default async function ChallengePage({ params }: Props) {
   if (!challenge) notFound()
   const activity = await getResearchActivity(challenge.links.repo)
   const summary = summarize(challenge, scorecards)
+  const highlight = researchHighlight(reviews, measurements)
 
   return (
     <>
-      <ChallengeHero challenge={challenge} summary={summary} />
+      <ChallengeHero challenge={challenge} summary={summary} highlight={highlight} />
       <Leaderboard
         slug={slug}
         scored={summary.scored}

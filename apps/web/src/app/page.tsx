@@ -1,12 +1,20 @@
 import { notFound } from "next/navigation"
 
-import { getChallenge, getChallenges, getScorecards, getSite } from "@/data/source"
+import {
+  getChallenge,
+  getChallenges,
+  getResearchCases,
+  getResearchReviews,
+  getScorecards,
+  getSite,
+} from "@/data/source"
 import { Faq } from "@/features/faq/faq"
 import { Hero } from "@/features/hero/hero"
 import { StepsSection } from "@/features/how/steps-section"
 import { ChallengeShowcase } from "@/features/landing/challenge-showcase"
 import { Participate } from "@/features/participate/participate"
 import { summarize } from "@/lib/scoring"
+import { researchHighlight } from "@/lib/research-summary"
 
 export default async function HomePage() {
   const site = await getSite()
@@ -17,10 +25,14 @@ export default async function HomePage() {
   ])
   if (!featured) notFound()
   const entries = await Promise.all(
-    challenges.map(async (challenge) => ({
-      challenge,
-      scorecards: await getScorecards(challenge.slug),
-    })),
+    challenges.map(async (challenge) => {
+      const [scorecards, reviews, measurements] = await Promise.all([
+        getScorecards(challenge.slug),
+        getResearchReviews(challenge.slug),
+        getResearchCases(challenge.slug),
+      ])
+      return { challenge, scorecards, highlight: researchHighlight(reviews, measurements) }
+    }),
   )
 
   return (

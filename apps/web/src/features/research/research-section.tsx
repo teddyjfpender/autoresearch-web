@@ -158,16 +158,35 @@ export function ResearchSection({
             <div className="mt-6 grid gap-4">
               {reviews
                 .filter((review) => measurements.some((row) => row.prNumber === review.prNumber))
+                .toSorted((a, b) =>
+                  a.reviewState === "promoted_direct" && b.reviewState !== "promoted_direct"
+                    ? -1
+                    : b.reviewState === "promoted_direct" && a.reviewState !== "promoted_direct"
+                      ? 1
+                      : b.prNumber - a.prNumber,
+                )
                 .map((review) => {
                   const rows = measurements.filter((row) => row.prNumber === review.prNumber)
                   return (
-                    <details key={review.prNumber} className="rounded-2xl border border-line p-5">
+                    <details
+                      key={review.prNumber}
+                      open={review.reviewState === "promoted_direct"}
+                      className="rounded-2xl border border-line p-5"
+                    >
                       <summary className="cursor-pointer text-label">
                         PR #{review.prNumber} · {reviewLabel[review.reviewState]} · at least{" "}
                         {review.publicSamplesPerArm} sample
                         {review.publicSamplesPerArm === 1 ? "" : "s"} per arm
                       </summary>
                       <p className="mt-3 text-sm text-fg-muted">{review.decision}</p>
+                      <a
+                        href={`${repositoryUrl}/pull/${String(review.prNumber)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-3 inline-block text-label text-accent hover:underline"
+                      >
+                        Review PR #{review.prNumber} <ArrowUpRight className="ml-1 inline size-3" />
+                      </a>
                       <div className="mt-5 overflow-x-auto">
                         <table className="w-full min-w-[760px] text-left text-xs">
                           <thead className="border-b border-line text-fg-muted">
@@ -175,6 +194,8 @@ export function ResearchSection({
                               <th className="py-2 pr-4">Public case</th>
                               <th className="py-2 pr-4">Command B → C (s)</th>
                               <th className="py-2 pr-4">C/B command</th>
+                              <th className="py-2 pr-4">Command improvement</th>
+                              <th className="py-2 pr-4">Ingress B → C (s)</th>
                               <th className="py-2 pr-4">Cairo execute/finish B → C (s)</th>
                               <th className="py-2">Peak B → C (GiB, rounded)</th>
                             </tr>
@@ -193,6 +214,20 @@ export function ResearchSection({
                                     row.candidateCommandS / row.baselineCommandS
                                   ).toFixed(3)}
                                   {row.medianPairedCommandRatio === null ? " single" : " paired"}
+                                </td>
+                                <td className="py-2 pr-4 tabular-nums">
+                                  {(
+                                    (1 -
+                                      (row.medianPairedCommandRatio ??
+                                        row.candidateCommandS / row.baselineCommandS)) *
+                                    100
+                                  ).toFixed(1)}
+                                  %
+                                </td>
+                                <td className="py-2 pr-4 tabular-nums">
+                                  {row.baselineIngressS === null || row.candidateIngressS === null
+                                    ? "—"
+                                    : `${row.baselineIngressS.toFixed(3)} → ${row.candidateIngressS.toFixed(3)}`}
                                 </td>
                                 <td className="py-2 pr-4 tabular-nums">
                                   {row.baselineProofS === null || row.candidateProofS === null

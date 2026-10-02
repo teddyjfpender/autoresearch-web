@@ -70,11 +70,14 @@ sent to the browser. API failures show a GitHub link instead of pretending
 there is no activity. PR bodies and discussion text are displayed as
 unverified research claims. Staging explicitly suppresses `scorecards.json`
 entries; no PR or Discussion creates a ranked score.
-The direct research table below the PR feed is explicitly unranked: PR #4 has
-six observations per arm, while PR #6 reports one unpaired observation per arm.
-The static review state says #3 and #6 are queued for the judge, not that either
-has a score. PR #3's corrected patch passes its focused test but has no GPU
-after-measurement.
+The challenge page and home card now feature PR #6's independently checked
+direct H200 result: all six public PIE commands improved by roughly 16–23%,
+while Cairo proof execution was nearly unchanged. Its ten-case per-case table
+is expanded by default and links to the exact review PR and raw measurements.
+PR #6 has three idle-host ABBA rounds with six samples per arm; PR #3 has a
+smaller independent H200 check, while PR #4's data is author-reported.
+The PR #6 highlight is explicitly unranked: its equal-family gain is below
+the session's A/A noise threshold, and there is no signed judge receipt.
 
 ## Connecting the live challenge
 
