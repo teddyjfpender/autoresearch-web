@@ -187,7 +187,7 @@ export const caseResultSchema = z.object({
   memoryRatio: z.number().positive(),
 })
 
-/** A ranked, judge-produced scorecard. Track scores are derived, never stored. */
+/** A ranked scorecard derived from a signed judge receipt. */
 export const scorecardSchema = z.object({
   id: z.string().min(1),
   submittedAt: z.iso.datetime(),
@@ -198,6 +198,23 @@ export const scorecardSchema = z.object({
   notes: z.string(),
   commit: sha(40),
   patchSha256: sha(64),
+  repositoryUrl: z.url(),
+  prNumber: z.number().int().positive(),
+  prUrl: z.url(),
+  receiptSha256: sha(64),
+  receiptKeyId: sha(64),
+  /** Signed judge aggregates include private holdouts; public per-case rows do not. */
+  rTime: z.number().positive(),
+  rMemory: z.number().positive(),
+  tracks: z.record(
+    trackIdSchema,
+    z.object({
+      eligible: z.boolean(),
+      score: z.number().positive().nullable(),
+      promotableAgainstBaseline: z.boolean(),
+    }),
+  ),
+  promotedTracks: z.array(trackIdSchema),
   perCase: z.array(caseResultSchema).min(1),
 })
 

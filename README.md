@@ -55,7 +55,8 @@ two folders and validates the result with the zod schemas in `schema.ts`:
 - `imported/` is measured data written by `bun run data:import` from a `stwo-cuda-challenge`
   checkout (default: a sibling directory). It reads `benchmark.json`, `fixtures/public-v1.json`,
   and the H200 qualification report and TSVs.
-  `scorecards.json` holds judge-signed rank results and is empty until intake is live.
+  `scorecards.json` holds derived, signed-rank results and remains empty until
+  the first qualified H200 batch is published.
 
 A case missing from either side fails the build. The challenge page now reads the
 latest public PR metadata from the GitHub REST API. When the server has a
@@ -79,11 +80,12 @@ receipt → website flow. This site needs two independent inputs:
    author avatars, plain-text excerpts, state/category, and Discussion comment
    counts. It links to GitHub for the full history and comments. A dedicated
    read-only GitHub App installation token is preferable to a personal token.
-2. A read-only feed of redacted rank receipts and detached signatures, plus
-   submission ID, repository URL, commit SHA, patch digest, and contract epoch.
-   A trusted importer must verify the operator's Ed25519 signature, match the
-   immutable commit and patch, then write `scorecards.json`. The site's build
-   or cache must refresh after that import. Never expose the intake bearer
+2. The challenge's `service/site_export.py` now verifies the operator's Ed25519
+   rank receipt against the immutable PR/commit/patch mapping, then stages
+   `scorecards.json`, the redacted receipt, its detached signature, and the
+   public key in this website checkout. Commit that snapshot to this repo to
+   trigger Vercel. `bun run verify:receipts` checks every published signature
+   and signed score again before a build. Never expose the intake bearer
    token, operator signing key, SQLite state, or private holdouts here.
 
 The challenge is public and has no self-hosted H200 runner, Actions judge
@@ -93,7 +95,9 @@ the research target: direct Cairo proof-stage times of 1.17–1.95 s. The
 6.90–9.78 s Cairo range is full-command time, including ingress and publication.
 The visible two-run H200 medians are **unranked direct-run context**, not paired
 judge baselines. Wrap, fold, and pipeline proof-only timers are missing; a
-proof-only leaderboard requires a reviewed new epoch and fresh baselines. The
+proof-stage leaderboard requires the decided, judge-owned
+[new epoch](https://github.com/teddyjfpender/stwo-cuda-challenge/blob/main/spec/PROOF_STAGE_EPOCH.md)
+to be implemented and qualified with fresh baselines. The
 site remains in staging.
 
 The prover source is fetched only after `python3 challenge.py setup` in the
@@ -135,11 +139,13 @@ root at the repository root so `packages/ui` is available during the build.
 
 ## Scoring model
 
-A scorecard stores only per-case paired ratios (`timeRatio`, `memoryRatio`), like the judge's
-`stwo-cuda-scorecard-v1`. `src/lib/scoring.ts` mirrors `harness/score.py`: family-weighted
-geometric means R_T and R_M, track scores (latency `1/R_T`, memory `1/R_M`, balanced
-`1/√(R_T·R_M)`) with their per-case guards, promotion at ≥1% over the standing leader, and the
-non-dominated (R_T, R_M) frontier. The site displays paired ratios only for ranked scorecards; it does not derive judged absolute values from the two unranked direct-run medians.
+A scorecard stores the judge-signed aggregate `R_T`, `R_M`, track eligibility,
+and scores, along with public per-case paired ratios. Hidden holdout cases can
+affect the aggregate, so the site never recomputes a score from the public rows.
+Operator-reviewed promotions are explicit in the export; a 1% chart heuristic
+alone cannot declare a new leader. The site displays paired ratios only for
+ranked scorecards and does not derive judged absolute values from the two
+unranked direct-run medians.
 
 ## Navigation
 

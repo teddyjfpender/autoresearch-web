@@ -1,18 +1,10 @@
 import type { Case, Challenge, FamilyId, Scorecard, TrackId } from "@/data/schema"
 
-/**
- * Client-side mirror of the judge scorer (harness/score.py). Each family gets one third of
- * the log-weight, split equally among its cases; R_T and R_M are weighted geometric means
- * of per-case ratios; track scores are "higher is better, baseline = 1".
- */
+/** Display the judge's signed aggregate scores, which include private holdouts. */
 
 export const TRACK_IDS: readonly TrackId[] = ["latency", "memory", "balanced"]
 
-const LATENCY_MEMORY_GUARD = 1.1
-const CASE_TIME_GUARD = 1.5
-const CASE_MEMORY_GUARD = 1.5
-const AGGREGATE_TIME_GUARD = 1.25
-
+/** Display-only weights from the public contract; never use them to rescore a rank receipt. */
 export function caseWeights(cases: readonly Case[]): Map<string, number> {
   const perFamily = new Map<FamilyId, number>()
   for (const testCase of cases) {
@@ -38,49 +30,25 @@ export interface Scored {
   tracks: Record<TrackId, TrackResult>
 }
 
-export function scoreCard(card: Scorecard, cases: readonly Case[]): Scored {
-  const weights = caseWeights(cases)
-  let logTime = 0
-  let logMemory = 0
-  for (const result of card.perCase) {
-    const weight = weights.get(result.caseId) ?? 0
-    logTime += weight * Math.log(result.timeRatio)
-    logMemory += weight * Math.log(result.memoryRatio)
-  }
-  const rTime = Math.exp(logTime)
-  const rMemory = Math.exp(logMemory)
-
-  const over = (key: "timeRatio" | "memoryRatio", limit: number, label: string) =>
-    card.perCase
-      .filter((result) => result[key] > limit)
-      .map((result) => `${result.caseId} ${label} ${result[key].toFixed(3)} > ${limit.toFixed(2)}`)
-  const aggregateTime =
-    rTime > AGGREGATE_TIME_GUARD
-      ? [`R_T ${rTime.toFixed(3)} > ${AGGREGATE_TIME_GUARD.toFixed(2)}`]
-      : []
-
-  const latencyFailures = over("memoryRatio", LATENCY_MEMORY_GUARD, "M/M₀")
-  const memoryFailures = [...over("timeRatio", CASE_TIME_GUARD, "T/T₀"), ...aggregateTime]
-  const balancedFailures = [
-    ...over("timeRatio", CASE_TIME_GUARD, "T/T₀"),
-    ...over("memoryRatio", CASE_MEMORY_GUARD, "M/M₀"),
-    ...aggregateTime,
-  ]
-  const track = (failures: string[], score: number): TrackResult => ({
-    eligible: failures.length === 0,
-    score: failures.length === 0 ? score : null,
-    failures,
-  })
-
+export function scoreCard(card: Scorecard): Scored {
   return {
     card,
-    rTime,
-    rMemory,
+    rTime: card.rTime,
+    rMemory: card.rMemory,
     tracks: {
-      latency: track(latencyFailures, 1 / rTime),
-      memory: track(memoryFailures, 1 / rMemory),
-      balanced: track(balancedFailures, 1 / Math.sqrt(rTime * rMemory)),
+      latency: signedTrack(card, "latency"),
+      memory: signedTrack(card, "memory"),
+      balanced: signedTrack(card, "balanced"),
     },
+  }
+}
+
+function signedTrack(card: Scorecard, name: TrackId): TrackResult {
+  const track = card.tracks[name]
+  return {
+    eligible: track.eligible,
+    score: track.score,
+    failures: track.eligible ? [] : ["Failed a signed judge guard"],
   }
 }
 
@@ -107,7 +75,12 @@ export function promotions(
   let leader = 1
   for (const entry of scored) {
     const score = entry.tracks[track].score
-    if (score === null || score < leader * (1 + minImprovement)) continue
+    if (
+      score === null ||
+      !entry.card.promotedTracks.includes(track) ||
+      score < leader * (1 + minImprovement)
+    )
+      continue
     out.push({ scored: entry, score, previous: leader })
     leader = score
   }
@@ -144,7 +117,7 @@ export interface Summary {
 }
 
 export function summarize(challenge: Challenge, cards: readonly Scorecard[]): Summary {
-  const scored = cards.map((card) => scoreCard(card, challenge.cases))
+  const scored = cards.map(scoreCard)
   const byTrack = Object.fromEntries(
     TRACK_IDS.map((track) => [track, promotions(scored, track, challenge.contract.minImprovement)]),
   ) as Record<TrackId, Promotion[]>

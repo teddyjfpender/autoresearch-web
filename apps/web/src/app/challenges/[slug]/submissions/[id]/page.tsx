@@ -225,6 +225,25 @@ export default async function ScorecardPage({ params }: Props) {
                   <dd className="font-mono">{card.patchSha256.slice(0, 16)}…</dd>
                 </div>
                 <div className="flex justify-between gap-6">
+                  <dt className="text-fg-muted">Review PR</dt>
+                  <dd>
+                    <a href={card.prUrl} className="text-accent hover:underline">
+                      Open on GitHub
+                    </a>
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-6">
+                  <dt className="text-fg-muted">Signed receipt</dt>
+                  <dd>
+                    <a
+                      href={`/receipts/${card.receiptSha256}.json`}
+                      className="font-mono text-accent hover:underline"
+                    >
+                      {card.receiptSha256.slice(0, 16)}…
+                    </a>
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-6">
                   <dt className="text-fg-muted">Pinned prover</dt>
                   <dd className="font-mono">{challenge.contract.sourceCommit.slice(0, 12)}</dd>
                 </div>
