@@ -16,7 +16,7 @@ import { DiscussionPanel } from "@/features/board/discussion-panel"
 import { ChallengeHero } from "@/features/challenge/challenge-hero"
 import { ProgressChart } from "@/features/chart/progress-chart"
 import { ProofTypes } from "@/features/board/proof-types"
-import { buildCandidates, historyMilestones } from "@/lib/candidates"
+import { buildCandidates, firstProofTimes, historyMilestones } from "@/lib/candidates"
 import { getCommitDates, getResearchActivity } from "@/lib/github-research"
 import { summarize } from "@/lib/scoring"
 
@@ -58,7 +58,12 @@ export default async function ChallengePage({ params }: Props) {
 
   return (
     <>
-      <ChallengeHero challenge={challenge} summary={summary} candidates={candidates} />
+      <ChallengeHero
+        challenge={challenge}
+        summary={summary}
+        candidates={candidates}
+        firstProof={firstProofTimes(proofProgress)}
+      />
       <Container className="pb-24">
         <ChallengeBoard
           candidates={candidates}

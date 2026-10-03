@@ -8,7 +8,7 @@ import { ChevronRight } from "lucide-react"
 
 import type { Challenge } from "@/data/schema"
 import { formatSeconds } from "@/lib/format"
-import { scoreFor, type Candidate } from "@/lib/candidates"
+import { scoreFor, type Candidate, type FirstProof } from "@/lib/candidates"
 import { routes } from "@/lib/routes"
 import type { Summary } from "@/lib/scoring"
 
@@ -24,10 +24,12 @@ export function ChallengeHero({
   challenge,
   summary,
   candidates,
+  firstProof,
 }: {
   challenge: Challenge
   summary: Summary
   candidates: readonly Candidate[]
+  firstProof: FirstProof | null
 }) {
   const gatesDone = challenge.gates.filter((gate) => gate.status === "done").length
   const seconds = (values: readonly number[]) =>
@@ -48,6 +50,22 @@ export function ChallengeHero({
       ? [testCase.baseline.proofTimeS]
       : [],
   )
+  // The leader's Cairo proof times expressed against the challenge baseline (the first
+  // measured proof of each job): baseline × the leader's paired proof-time ratio.
+  const cairoAgainstBaseline = cairoCases.flatMap((item) => {
+    const first = challenge.cases.find((testCase) => testCase.id === item.caseId)?.baseline
+      .proofTimeS
+    return first === null || first === undefined
+      ? []
+      : [
+          {
+            candidate: first * (item.candidateS / item.baselineS),
+            // Where the job started: its first recorded proof, else the challenge baseline.
+            was: firstProof?.seconds.get(item.caseId) ?? first,
+          },
+        ]
+  })
+  const wasLabel = firstProof === null ? "at baseline" : `at ${firstProof.milestone}`
   const proved = challenge.cases.filter((testCase) => testCase.baseline.rounds > 0).length
   const speedup = (candidate: Candidate | undefined, bucket: "basket" | "pie") =>
     candidate === undefined
@@ -81,11 +99,11 @@ export function ChallengeHero({
                 ? { hint: `PR #${String(cairoLeader.prNumber)} · Cairo proofs` }
                 : {}),
             },
-            cairoCases.length > 0
+            cairoAgainstBaseline.length > 0
               ? {
                   label: "Cairo proof time",
-                  value: seconds(cairoCases.map((item) => item.candidateS)),
-                  hint: `was ${seconds(cairoCases.map((item) => item.baselineS))} (paired baseline)`,
+                  value: seconds(cairoAgainstBaseline.map((item) => item.candidate)),
+                  hint: `was ${seconds(cairoAgainstBaseline.map((item) => item.was))} ${wasLabel}`,
                 }
               : { label: "Cairo proof time", value: seconds(baselineCairo), hint: "baseline" },
             {

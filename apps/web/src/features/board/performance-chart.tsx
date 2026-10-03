@@ -26,6 +26,16 @@ import { createScale, extent } from "../chart/scales"
 const HEIGHT = 300
 const MARGIN = { top: 28, right: 28, bottom: 56, left: 72 }
 const HISTORY_GAP = 32
+/** Approximate advance of one 10px monospace glyph, for spacing milestone labels. */
+const LABEL_GLYPH_PX = 6.2
+/** Half the width of the first time tick ("Oct 2, 00:00"), which sits at the baseline. */
+const FIRST_TIME_TICK_HALF_PX = 40
+
+/** "hopper-v5" → "H5", "v33" stays "v33": compact milestone ticks; the full name is the title. */
+function shortMilestone(label: string): string {
+  const match = /^([a-z])[a-z]*-v?(\d+)$/i.exec(label)
+  return match ? `${(match[1] ?? "").toUpperCase()}${match[2] ?? ""}` : label
+}
 
 export type ChartMode = TrackId | "pareto"
 
@@ -80,6 +90,8 @@ interface Model {
   points: Point[]
   history: {
     milestone: HistoryMilestone
+    labeled: boolean
+    tick: string
     px: number
     py: number
     lowY: number | null
@@ -87,6 +99,7 @@ interface Model {
   }[]
   path: string
   historyPath: string
+  historyArea: string
   area: string
   baseline: { x: number; y: number }
   xTicks: { value: number; px: number; label: string }[]
@@ -170,6 +183,7 @@ export function PerformanceChart({
         history: [],
         path,
         historyPath: "",
+        historyArea: "",
         area: "",
         baseline: { x: x(1), y: y(1) },
         xTicks: ticks.map((value) => ({
@@ -215,7 +229,7 @@ export function PerformanceChart({
     const lo = Math.min(1, ...values)
     const hi = Math.max(1, ...values)
     const pad = Math.max(0.02, (hi - lo) * 0.12)
-    const y = createScale("lin", [lo - pad, hi + pad], [innerHeight, 0])
+    const y = createScale("lin", [Math.max(0, lo - pad), hi + pad], [innerHeight, 0])
 
     const best = runningBest(ordered, trackId, bucket)
     let path = `M${String(startX)},${String(y(1))}`
@@ -225,8 +239,16 @@ export function PerformanceChart({
     path += `H${String(innerWidth)}`
 
     const historyStep = shownHistory.length > 1 ? historyWidth / (shownHistory.length - 1) : 0
+    // Short tick labels, thinned so they never collide with each other or the first time tick.
+    const shortLabels = shownHistory.map((item) => shortMilestone(item.label))
+    const longest = Math.max(...shortLabels.map((label) => label.length), 3)
+    const labelSpacing = longest * LABEL_GLYPH_PX + 16
+    const labelEvery = historyStep > 0 ? Math.ceil(labelSpacing / historyStep) : 1
+    const lastLabelX = startX - FIRST_TIME_TICK_HALF_PX - labelSpacing / 2
     const historyPoints = shownHistory.map((milestone, index) => ({
       milestone,
+      tick: shortLabels[index] ?? milestone.label,
+      labeled: index % labelEvery === 0 && index * historyStep <= lastLabelX,
       px: shownHistory.length === 1 ? historyWidth / 2 : index * historyStep,
       py: y(milestone.speedup),
       lowY: milestone.low === null ? null : y(milestone.low),
@@ -236,6 +258,8 @@ export function PerformanceChart({
       .map((point, index) => `${index === 0 ? "M" : "L"}${String(point.px)},${String(point.py)}`)
       .concat(historyPoints.length > 0 ? [`L${String(startX)},${String(y(1))}`] : [])
       .join("")
+
+    const historyArea = historyPoints.length === 0 ? "" : `${historyPath}V${String(innerHeight)}H0Z`
 
     const tickCount = 4
     const xTicks = timed
@@ -265,6 +289,7 @@ export function PerformanceChart({
       history: historyPoints,
       path,
       historyPath,
+      historyArea,
       area: `${path}V${String(innerHeight)}H${String(startX)}Z`,
       baseline: { x: startX, y: y(1) },
       xTicks,
@@ -423,16 +448,23 @@ export function PerformanceChart({
               />
             )}
 
-            {/* Modeled history: hollow points on a dashed line, with estimate whiskers. */}
+            {/* Earlier milestones lead into the baseline: the same line, hollow modeled points. */}
             {model.history.length === 0 ? null : (
               <g>
+                <motion.path
+                  key={`history-area-${bucket}`}
+                  d={model.historyArea}
+                  fill="url(#perf-area)"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.8 }}
+                />
                 <motion.path
                   key={`history-${bucket}`}
                   d={model.historyPath}
                   fill="none"
-                  stroke="var(--ar-fg-faint)"
-                  strokeWidth={1.25}
-                  strokeDasharray="4 4"
+                  stroke="var(--ar-accent)"
+                  strokeWidth={1.5}
                   initial={{ pathLength: 0 }}
                   animate={{ pathLength: 1 }}
                   transition={{ duration: 1.2, ease: [0.76, 0, 0.24, 1] }}
@@ -445,8 +477,8 @@ export function PerformanceChart({
                         x2={point.px}
                         y1={point.lowY}
                         y2={point.highY}
-                        stroke="var(--ar-fg-faint)"
-                        strokeOpacity={0.5}
+                        stroke="var(--ar-accent)"
+                        strokeOpacity={0.25}
                         strokeWidth={6}
                         strokeLinecap="round"
                       />
@@ -456,27 +488,23 @@ export function PerformanceChart({
                       cy={point.py}
                       r={3.5}
                       fill="var(--ar-bg)"
-                      stroke="var(--ar-fg-faint)"
+                      stroke="var(--ar-accent)"
                       strokeWidth={1.5}
-                      strokeDasharray="2 2"
-                    />
-                    <text
-                      x={point.px}
-                      y={innerHeight + 22}
-                      textAnchor="middle"
-                      className="fill-fg-faint font-mono text-[10px]"
                     >
-                      {point.milestone.label}
-                    </text>
+                      <title>{point.milestone.label}</title>
+                    </circle>
+                    {point.labeled ? (
+                      <text
+                        x={point.px}
+                        y={innerHeight + 22}
+                        textAnchor="middle"
+                        className="fill-fg-faint font-mono text-[10px]"
+                      >
+                        {point.tick}
+                      </text>
+                    ) : null}
                   </g>
                 ))}
-                <line
-                  x1={model.baseline.x - HISTORY_GAP / 2}
-                  x2={model.baseline.x - HISTORY_GAP / 2}
-                  y1={0}
-                  y2={innerHeight}
-                  stroke="var(--ar-line)"
-                />
               </g>
             )}
 
@@ -643,10 +671,7 @@ export function PerformanceChart({
             measured
           </li>
           <li className="flex items-center gap-1.5">
-            <span
-              aria-hidden
-              className="size-2 rounded-full border border-dashed border-fg-faint"
-            />
+            <span aria-hidden className="size-2 rounded-full border border-accent" />
             modeled
           </li>
         </ul>

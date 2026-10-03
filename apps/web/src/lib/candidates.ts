@@ -310,3 +310,34 @@ export function historyMilestones(
     })
     .toSorted((a, b) => a.order - b.order)
 }
+
+/** The earliest recorded proof of each Cairo job: the first milestone, per case. */
+export interface FirstProof {
+  milestone: string
+  seconds: ReadonlyMap<string, number>
+}
+
+export function firstProofTimes(
+  rows: readonly {
+    kind: string
+    milestone: string
+    order: number
+    caseId: string
+    proofS: number
+  }[],
+): FirstProof | null {
+  const earliest = rows
+    .filter((row) => row.kind === "historical_model")
+    .toSorted((a, b) => a.order - b.order)[0]
+  if (earliest === undefined) return null
+  const group = rows.filter(
+    (row) =>
+      row.kind === "historical_model" &&
+      row.order === earliest.order &&
+      row.milestone === earliest.milestone,
+  )
+  return {
+    milestone: earliest.milestone,
+    seconds: new Map(group.map((row) => [row.caseId, row.proofS])),
+  }
+}

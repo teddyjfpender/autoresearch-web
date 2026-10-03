@@ -43,12 +43,22 @@ function ChallengeCard({ challenge, scorecards, highlight }: ShowcaseEntry) {
         },
         { label: "Ranked", value: "0" },
       ]
-  const cairoCases = challenge.cases.flatMap((testCase) =>
-    testCase.family !== "pie" || testCase.baseline.proofTimeS === null
+  // Cairo proofs when this host has them, otherwise whichever jobs it has proved so far.
+  const proved = challenge.cases.flatMap((testCase) =>
+    testCase.baseline.proofTimeS === null
       ? []
-      : [{ id: testCase.id, title: testCase.title, seconds: testCase.baseline.proofTimeS }],
+      : [
+          {
+            id: testCase.id,
+            family: testCase.family,
+            title: testCase.title,
+            seconds: testCase.baseline.proofTimeS,
+          },
+        ],
   )
-  const slowest = Math.max(...cairoCases.map((testCase) => testCase.seconds))
+  const cairoOnly = proved.some((testCase) => testCase.family === "pie")
+  const bars = cairoOnly ? proved.filter((testCase) => testCase.family === "pie") : proved
+  const slowest = Math.max(...bars.map((testCase) => testCase.seconds))
   return (
     <Spotlight className="group/card h-full">
       <SectionLink
@@ -109,11 +119,17 @@ function ChallengeCard({ challenge, scorecards, highlight }: ShowcaseEntry) {
           ) : (
             <>
               <div className="flex items-center justify-between gap-4 text-label">
-                <span>Direct Cairo proof stage · {challenge.contract.hardware.gpu}</span>
+                <span>
+                  {cairoOnly ? "Direct Cairo proof stage" : "Direct proof stage"} ·{" "}
+                  {challenge.contract.hardware.gpu}
+                </span>
                 <span className="text-fg-muted">baseline</span>
               </div>
+              {bars.length === 0 ? (
+                <p className="text-sm text-fg-faint">No proof jobs measured on this host yet.</p>
+              ) : null}
               <ul className="space-y-2.5">
-                {cairoCases.map((testCase) => (
+                {bars.map((testCase) => (
                   <li
                     key={testCase.id}
                     className="grid grid-cols-[7.5rem_1fr_3.5rem] items-center gap-3 text-xs"
