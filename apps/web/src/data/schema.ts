@@ -255,7 +255,7 @@ export const researchCaseSchema = z.object({
   qualification: z.string(),
   samplesPerArm: z.number().int().positive(),
   timeScope: z.literal("external_command"),
-  proofScope: z.enum(["", "cairo_execute_finish"]),
+  proofScope: z.enum(["", "cairo_execute_finish", "circuit_resident"]),
   baselineCommandS: z.number().positive(),
   candidateCommandS: z.number().positive(),
   medianPairedCommandRatio: z.number().positive().nullable(),

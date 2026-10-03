@@ -74,11 +74,10 @@ no PR or Discussion creates a ranked score.
 The challenge page leads with an unranked research progression line: one
 six-PIE trend for every measured PR and one full-basket trend only when all ten
 cases were measured. A separate chart can select every reviewed PR, including
-research-only regressions, and compare PIE, recursion and pipeline cases. PR #6
-has three idle-host ABBA rounds with six samples per arm; PR #3 has a smaller
-independent H200 check, while PR #4 has author-reported direct research data.
-The PR #6 highlight is explicitly unranked: its equal-family gain is below
-the session's A/A noise threshold, and there is no signed judge receipt.
+research-only regressions, and compare PIE, recursion and pipeline cases.
+Reviewed measurements and promotion states come from the challenge repository's
+current `data/site/sources.json` manifest. Every direct H200 highlight is
+explicitly unranked; only signed judge receipts can create leaderboard scores.
 
 ## Connecting the live challenge
 
