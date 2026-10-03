@@ -23,6 +23,7 @@ export const challengeSourceManifestSchema = z.object({
   runs: sourcePath,
   reviews: sourcePath,
   research: sourcePath,
+  ingressStudy: sourcePath,
   scorecards: sourcePath,
 })
 export type ChallengeSourceManifest = z.infer<typeof challengeSourceManifestSchema>
@@ -46,7 +47,7 @@ export function parseChallengeFiles(
     })
     .parse(readJson(sources.activation))
   const readTsv = (relative: string): Record<string, string>[] => {
-    const [header = "", ...lines] = get(relative).trim().split("\n")
+    const [header = "", ...lines] = get(relative).trim().replace(/\r\n?/g, "\n").split("\n")
     const columns = header.split("\t")
     return lines.map((line) => {
       const cells = line.split("\t")
@@ -239,5 +240,44 @@ export function parseChallengeFiles(
     )
       throw new Error(`Research row is not bound to a reviewed PR and public case: ${row.caseId}`)
   }
-  return { activation, contract, cases, reviews, researchCases }
+  const ingressStudy = z
+    .array(
+      z.object({
+        cohort: z.enum(["two-distinct", "four-distinct"]),
+        variant: z.enum(["baseline", "candidate"]),
+        samples: z.number().int().positive(),
+        pieCount: z.number().int().positive(),
+        meanCommandS: z.number().positive(),
+        meanIngressS: z.number().positive(),
+        peakDeviceBytes: z.number().positive(),
+        binarySha256: z.string().regex(/^[a-f0-9]{64}$/),
+        receiptSha256: z.string().regex(/^[a-f0-9]{64}$/),
+      }),
+    )
+    .parse(
+      readTsv(sources.ingressStudy).map((row) => ({
+        cohort: row["cohort"],
+        variant: row["variant"],
+        samples: required(row["samples"], "ingress samples"),
+        pieCount: required(row["pie_count"], "ingress pie_count"),
+        meanCommandS: required(row["mean_command_wall_s"], "ingress mean_command_wall_s"),
+        meanIngressS: required(row["mean_ingress_sum_s"], "ingress mean_ingress_sum_s"),
+        peakDeviceBytes: required(row["peak_device_bytes"], "ingress peak_device_bytes"),
+        binarySha256: row["binary_sha256"],
+        receiptSha256: row["receipt_sha256"],
+      })),
+    )
+  for (const cohort of ["two-distinct", "four-distinct"] as const) {
+    const pair = ingressStudy.filter((row) => row.cohort === cohort)
+    if (
+      pair.length !== 2 ||
+      pair[0]?.variant === pair[1]?.variant ||
+      pair[0]?.pieCount !== pair[1]?.pieCount ||
+      pair[0]?.samples !== pair[1]?.samples ||
+      pair[0]?.receiptSha256 !== pair[1]?.receiptSha256
+    )
+      throw new Error(`Invalid H200 ingress A/B pair: ${cohort}`)
+  }
+  if (ingressStudy.length !== 4) throw new Error("Unexpected H200 ingress A/B rows")
+  return { activation, contract, cases, reviews, researchCases, ingressStudy }
 }

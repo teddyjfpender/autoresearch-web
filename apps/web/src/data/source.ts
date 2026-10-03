@@ -97,3 +97,7 @@ export const getResearchReviews = cache(async (slug: string): Promise<readonly R
 export const getResearchCases = cache(async (slug: string): Promise<readonly ResearchCase[]> =>
   slug === "stwo-cuda" ? (await getChallengeRepositoryData()).researchCases : [],
 )
+
+export const getIngressStudy = cache(async (slug: string) =>
+  slug === "stwo-cuda" ? (await getChallengeRepositoryData()).ingressStudy : [],
+)

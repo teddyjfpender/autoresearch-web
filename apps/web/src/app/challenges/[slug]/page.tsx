@@ -5,6 +5,7 @@ import { notFound } from "next/navigation"
 import {
   getChallenge,
   getChallenges,
+  getIngressStudy,
   getResearchCases,
   getResearchReviews,
   getScorecards,
@@ -12,6 +13,7 @@ import {
 import { ChallengeBoard } from "@/features/board/challenge-board"
 import { ChallengeDetails } from "@/features/board/challenge-details"
 import { DiscussionPanel } from "@/features/board/discussion-panel"
+import { IngressStudy } from "@/features/board/ingress-study"
 import { ChallengeHero } from "@/features/challenge/challenge-hero"
 import { ProgressChart } from "@/features/chart/progress-chart"
 import { buildCandidates } from "@/lib/candidates"
@@ -38,11 +40,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ChallengePage({ params }: Props) {
   const { slug } = await params
-  const [challenge, scorecards, reviews, measurements] = await Promise.all([
+  const [challenge, scorecards, reviews, measurements, ingressStudy] = await Promise.all([
     getChallenge(slug),
     getScorecards(slug),
     getResearchReviews(slug),
     getResearchCases(slug),
+    getIngressStudy(slug),
   ])
   if (!challenge) notFound()
   const activity = await getResearchActivity(challenge.links.repo)
@@ -77,6 +80,7 @@ export default async function ChallengePage({ params }: Props) {
           }
           details={<ChallengeDetails challenge={challenge} />}
         />
+        <IngressStudy rows={ingressStudy} />
       </Container>
     </>
   )

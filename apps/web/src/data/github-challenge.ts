@@ -22,7 +22,7 @@ export const getChallengeRepositoryData = cache(async () => {
   const token = process.env["GITHUB_READ_TOKEN"]
   if (token !== undefined && token !== "") headers["Authorization"] = `Bearer ${token}`
   const refResponse = await fetch(
-    `https://api.github.com/repos/${REPOSITORY}/commits/main?site-feed=v3`,
+    `https://api.github.com/repos/${REPOSITORY}/commits/main?site-feed=v4`,
     {
       headers,
       next: { revalidate: REF_REVALIDATE_SECONDS },
@@ -51,6 +51,7 @@ export const getChallengeRepositoryData = cache(async () => {
     sources.runs,
     sources.reviews,
     sources.research,
+    sources.ingressStudy,
     sources.scorecards,
   ]
   const contents = await Promise.all(
