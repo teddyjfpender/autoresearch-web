@@ -157,7 +157,7 @@ export function ChallengeHero({
           </nav>
         </Reveal>
 
-        <div className="mt-6 flex flex-wrap items-end justify-between gap-x-12 gap-y-8">
+        <div className="mt-6 grid gap-x-16 gap-y-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:items-end">
           <div className="max-w-2xl">
             <Reveal y={8} delay={0.05}>
               <div className="flex flex-wrap items-center gap-2">
@@ -179,11 +179,11 @@ export function ChallengeHero({
             </Reveal>
           </div>
           <Reveal delay={0.3}>
-            <dl className="grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-4">
+            <dl className="grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-4 lg:grid-cols-2">
               {stats.map((stat) => (
                 <div key={stat.label} className="border-l border-line pl-4">
                   <dt className="text-label whitespace-nowrap">{stat.label}</dt>
-                  <dd className="mt-1 text-2xl font-light tracking-tight whitespace-nowrap tabular">
+                  <dd className="mt-1 text-2xl font-light tracking-tight whitespace-nowrap tabular lg:text-3xl">
                     {stat.value}
                   </dd>
                   {stat.hint === undefined ? null : (

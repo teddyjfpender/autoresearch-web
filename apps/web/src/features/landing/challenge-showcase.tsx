@@ -40,7 +40,7 @@ function improvement({ progress, highlight }: ShowcaseEntry): { value: number; l
 }
 
 function ChallengeCard(entry: ShowcaseEntry) {
-  const { challenge, scorecards, highlight } = entry
+  const { challenge, scorecards } = entry
   const lead = improvement(entry)
   const summary = summarize(challenge, scorecards)
   const ranked = summary.ranked > 0
@@ -83,46 +83,35 @@ function ChallengeCard(entry: ShowcaseEntry) {
     <Spotlight className="group/card h-full">
       <SectionLink
         href={routes.challenge(challenge.slug)}
-        className="grid h-full gap-10 p-6 sm:p-10 lg:grid-cols-[1fr_1.1fr]"
+        className="grid h-full gap-6 p-5 sm:p-7 lg:grid-cols-[1fr_1fr]"
       >
-        <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-5">
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={challenge.status} />
             <span className="font-mono text-xs text-fg-faint">/{challenge.slug}</span>
           </div>
-          <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
-            <p className="text-[clamp(3.5rem,8vw,6.5rem)] leading-[0.85] font-light tracking-[-0.06em] text-accent tabular">
+          <div className="flex flex-wrap items-end gap-x-4 gap-y-1">
+            <p className="text-[clamp(2.75rem,5vw,4.25rem)] leading-[0.85] font-light tracking-[-0.06em] text-accent tabular">
               <NumberTicker value={lead.value} suffix="%" />
             </p>
-            <p className="max-w-[16rem] pb-1 text-sm leading-snug text-fg-muted">{lead.label}</p>
+            <p className="max-w-[14rem] pb-1 text-sm leading-snug text-fg-muted">{lead.label}</p>
           </div>
           <div>
-            <h3 className="text-3xl font-normal tracking-[-0.04em] sm:text-4xl">
+            <h3 className="text-2xl font-normal tracking-[-0.04em] sm:text-3xl">
               {challenge.name}
             </h3>
-            <p className="mt-4 max-w-md text-fg-muted">{challenge.summary}</p>
-            {highlight ? (
-              <p className="mt-5 max-w-md border-l-2 border-accent pl-4 text-sm text-fg-muted">
-                <span className="text-accent">
-                  PR #{highlight.candidate.prNumber} · direct {challenge.contract.hardware.gpu}{" "}
-                  research:
-                </span>{" "}
-                all {highlight.pieCount} public PIEs cut proof time by{" "}
-                {Math.round(highlight.pieReductionMin * 100)}–
-                {Math.round(highlight.pieReductionMax * 100)}%. Unranked.
-              </p>
-            ) : null}
+            <p className="mt-2 line-clamp-2 max-w-md text-sm text-fg-muted">{challenge.summary}</p>
           </div>
-          <dl className="mt-auto grid grid-cols-3 gap-4 border-t border-line pt-6">
+          <dl className="mt-auto grid grid-cols-3 gap-4 border-t border-line pt-4">
             {stats.map((stat) => (
               <div key={stat.label}>
                 <dt className="text-label">{stat.label}</dt>
-                <dd className="mt-1 text-2xl font-light tracking-tight tabular">{stat.value}</dd>
+                <dd className="mt-1 text-xl font-light tracking-tight tabular">{stat.value}</dd>
               </div>
             ))}
           </dl>
         </div>
-        <div className="relative flex flex-col justify-between gap-6 overflow-hidden rounded-xl bg-bg p-5">
+        <div className="relative flex flex-col justify-between gap-4 overflow-hidden rounded-xl bg-bg p-4 sm:p-5">
           {ranked ? (
             <>
               <div className="flex items-center justify-between text-label">
@@ -139,7 +128,7 @@ function ChallengeCard(entry: ShowcaseEntry) {
                     .toReversed()
                     .map((p) => p.score),
                 ]}
-                className="h-40 w-full"
+                className="h-28 w-full"
               />
             </>
           ) : (
@@ -154,7 +143,7 @@ function ChallengeCard(entry: ShowcaseEntry) {
               {bars.length === 0 ? (
                 <p className="text-sm text-fg-faint">No proof jobs measured on this host yet.</p>
               ) : null}
-              <ul className="space-y-2.5">
+              <ul className="space-y-2">
                 {bars.map((testCase) => (
                   <li
                     key={testCase.id}
@@ -227,7 +216,7 @@ export function ChallengeShowcase({
               {
                 id: "next-race",
                 content: (
-                  <div className="flex h-full flex-col justify-between gap-10 rounded-2xl border border-dashed border-line p-6 sm:p-10">
+                  <div className="flex h-full flex-col justify-between gap-6 rounded-2xl border border-dashed border-line p-5 sm:p-7">
                     <span className="inline-flex size-12 items-center justify-center rounded-full border border-line text-fg-faint">
                       <Plus className="size-5" />
                     </span>
