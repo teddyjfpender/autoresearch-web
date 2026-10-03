@@ -100,7 +100,7 @@ export function ChallengeDetails({ challenge }: { challenge: Challenge }) {
           <table className="w-full min-w-[40rem] text-sm">
             <thead>
               <tr className="border-b border-line">
-                {["Case", "Family", "Stages", "Baseline", "Device peak"].map((header, index) => (
+                {["Case", "Family", "Stages", "Proof time", "Peak memory"].map((header, index) => (
                   <th
                     key={header}
                     scope="col"
@@ -123,10 +123,14 @@ export function ChallengeDetails({ challenge }: { challenge: Challenge }) {
                     {testCase.stages.map((id) => stageName.get(id)).join(" → ")}
                   </td>
                   <td className="pr-4 text-right font-mono text-xs tabular">
-                    {formatSeconds(testCase.baseline.commandTimeS)}
+                    {testCase.baseline.proofTimeS === null
+                      ? "Pending"
+                      : formatSeconds(testCase.baseline.proofTimeS)}
                   </td>
                   <td className="text-right font-mono text-xs text-fg-muted tabular">
-                    {formatGB(testCase.baseline.peakBytes)}
+                    {testCase.baseline.peakBytes === null
+                      ? "—"
+                      : formatGB(testCase.baseline.peakBytes)}
                   </td>
                 </tr>
               ))}
@@ -134,8 +138,8 @@ export function ChallengeDetails({ challenge }: { challenge: Challenge }) {
           </table>
         </div>
         <p className="mt-3 text-label">
-          {contract.timeScope} Medians of {String(Math.max(...cases.map((c) => c.baseline.rounds)))}{" "}
-          direct H200 runs, measured {formatDate(contract.baselineMeasuredAt)}.
+          {contract.timeScope} Unranked direct observations on {contract.hardware.gpu}; latest
+          recorded {formatDate(contract.baselineMeasuredAt)}.
         </p>
       </Block>
 

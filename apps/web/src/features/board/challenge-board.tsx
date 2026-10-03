@@ -4,13 +4,13 @@ import { Tabs, TabsPanel } from "@autoresearch/ui/components/tabs"
 import { useEffect, useState, type ReactNode } from "react"
 
 import type { Family, Track } from "@/data/schema"
-import type { BucketId, Candidate } from "@/lib/candidates"
+import type { BucketId, Candidate, HistoryMilestone } from "@/lib/candidates"
 
 import { registerTabs } from "../site/scroll"
 import { CandidateTable } from "./candidate-table"
 import { PerformanceChart, type ChartMode } from "./performance-chart"
 
-export const BOARD_TABS = ["leaderboard", "discussion", "details"] as const
+export const BOARD_TABS = ["leaderboard", "proofs", "discussion", "details"] as const
 export type BoardTab = (typeof BOARD_TABS)[number]
 const BOARD_ROOT = "board"
 
@@ -24,18 +24,22 @@ export function ChallengeBoard({
   candidates,
   families,
   tracks,
-  timeScope,
   baselineDate,
+  history,
   rankedChart,
   discussion,
   details,
+  proofs,
   discussionCount,
 }: {
   candidates: readonly Candidate[]
   families: readonly Family[]
   tracks: readonly Track[]
-  timeScope: string
   baselineDate: string
+  /** Modeled milestones before the baseline, for the Cairo tab of the chart. */
+  history: readonly HistoryMilestone[]
+  /** The "what is being proved" panel. */
+  proofs: ReactNode
   /** Signed-score chart, shown instead of the candidate chart once anything is ranked. */
   rankedChart: ReactNode
   discussion: ReactNode
@@ -44,15 +48,11 @@ export function ChallengeBoard({
 }) {
   const [tab, setTab] = useState<BoardTab>("leaderboard")
   const [mode, setMode] = useState<ChartMode>("latency")
-  // Default to the whole basket when any candidate covers it, otherwise the first family.
-  const [bucket, setBucket] = useState<BucketId>(
-    candidates.some((candidate) => candidate.buckets.basket !== null)
-      ? "basket"
-      : (families[0]?.id ?? "basket"),
-  )
+  // Job-type tabs follow the families' order, then the whole basket; Cairo proofs first.
+  const [bucket, setBucket] = useState<BucketId>(families[0]?.id ?? "basket")
   const buckets: { value: BucketId; label: string }[] = [
-    { value: "basket", label: "Full basket" },
     ...families.map((family) => ({ value: family.id, label: family.name })),
+    { value: "basket", label: "All jobs" },
   ]
   const [selected, setSelected] = useState<number | null>(null)
 
@@ -96,6 +96,7 @@ export function ChallengeBoard({
         }}
         items={[
           { value: "leaderboard", label: "Leaderboard", meta: candidates.length },
+          { value: "proofs", label: "Proofs" },
           {
             value: "discussion",
             label: "Discussion",
@@ -116,8 +117,8 @@ export function ChallengeBoard({
               onBucketChange={setBucket}
               selected={selected}
               onSelect={select}
-              timeScope={timeScope}
               baselineDate={baselineDate}
+              history={history}
             />
           )}
           {candidates.length === 0 ? (
@@ -135,6 +136,9 @@ export function ChallengeBoard({
               onSelect={select}
             />
           )}
+        </TabsPanel>
+        <TabsPanel value="proofs" id="proofs">
+          {proofs}
         </TabsPanel>
         <TabsPanel value="discussion" id="discussion">
           {discussion}

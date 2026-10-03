@@ -34,6 +34,7 @@ export function challengeNav(slug: string): NavConfig {
     back: { label: "All challenges", href: routes.homeSection("challenges") },
     items: [
       section("leaderboard", "Leaderboard", routes.challengeSection(slug, "leaderboard")),
+      section("proofs", "Proofs", routes.challengeSection(slug, "proofs")),
       section("discussion", "Discussion", routes.challengeSection(slug, "discussion")),
       section("details", "Details", routes.challengeSection(slug, "details")),
     ],

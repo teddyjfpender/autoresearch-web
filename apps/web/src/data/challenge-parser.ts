@@ -26,6 +26,10 @@ export const challengeSourceManifestSchema = z.object({
   research: sourcePath,
   ingressStudy: sourcePath,
   scorecards: sourcePath,
+  /** Proof-only, multi-backend epoch. Optional while the repository stages it. */
+  proofBenchmark: sourcePath.optional(),
+  proofFixture: sourcePath.optional(),
+  proofObservations: z.array(sourcePath).optional(),
 })
 export type ChallengeSourceManifest = z.infer<typeof challengeSourceManifestSchema>
 
@@ -93,6 +97,7 @@ export function parseChallengeFiles(
 
   const contract = contractImportedSchema.parse({
     ...benchmark,
+    backend: "cuda",
     baselineMeasuredAt: reportMeta.date_utc,
     baselineQualification: reportMeta.qualification,
     sourceRepository: benchmark.sourceRepository.replace(/\.git$/, ""),
@@ -177,6 +182,7 @@ export function parseChallengeFiles(
         ...(ingressS === null ? {} : { ingressS: round(ingressS) }),
         peakBytes: required(median["peak_device_bytes"], `${testCase.id} peak_device_bytes`),
         rounds: report.rounds.length,
+        source: "H200 direct qualification",
       },
     })
   })

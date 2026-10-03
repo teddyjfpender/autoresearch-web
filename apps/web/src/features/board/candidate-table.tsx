@@ -34,17 +34,10 @@ function Breakout({ candidate, families }: { candidate: Candidate; families: rea
               {rows.map((row) => (
                 <li
                   key={row.caseId}
-                  className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 text-sm sm:grid-cols-[minmax(0,1fr)_auto_auto_minmax(0,11rem)] sm:items-center"
+                  className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 text-sm sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,11rem)] sm:items-center"
                 >
                   <span className="truncate">{row.title}</span>
-                  <span className="flex items-center gap-2">
-                    <span className="w-9 text-label">time</span>
-                    <RatioCell ratio={row.ratio} />
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <span className="w-9 text-label">mem</span>
-                    <RatioCell ratio={row.memoryRatio} />
-                  </span>
+                  <RatioCell ratio={row.ratio} />
                   <span className="font-mono text-xs text-fg-muted tabular sm:text-right">
                     {formatSeconds(row.baselineS)} → {formatSeconds(row.candidateS)} ·{" "}
                     {formatNumber(row.candidatePeakGiB)} GiB
@@ -56,8 +49,8 @@ function Breakout({ candidate, families }: { candidate: Candidate; families: rea
         )
       })}
       <p className="text-label">
-        Ratios are candidate ÷ baseline (time: medians of {String(candidate.samplesPerArm)} paired
-        samples per arm; memory: whole-device peak). Left of centre is better.
+        Proof time, candidate ÷ baseline, medians of {String(candidate.samplesPerArm)} paired
+        samples per arm. Left of centre is faster; peak memory is shown for capacity only.
         {candidate.coverage.measured < candidate.coverage.total
           ? ` ${String(candidate.coverage.measured)} of ${String(candidate.coverage.total)} cases measured.`
           : ""}

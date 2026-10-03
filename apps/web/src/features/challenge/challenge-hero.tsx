@@ -13,6 +13,7 @@ import { routes } from "@/lib/routes"
 import type { Summary } from "@/lib/scoring"
 
 import { SectionLink } from "../site/section-link"
+import { BackendSwitcher } from "./backend-switcher"
 import { StatusBadge } from "./status-badge"
 
 /**
@@ -30,22 +31,30 @@ export function ChallengeHero({
 }) {
   const gatesDone = challenge.gates.filter((gate) => gate.status === "done").length
   const seconds = (values: readonly number[]) =>
-    `${formatNumber(Math.min(...values), 2)}–${formatSeconds(Math.max(...values))}`
+    values.length === 0
+      ? "—"
+      : `${formatNumber(Math.min(...values), 2)}–${formatSeconds(Math.max(...values))}`
+  const best = (bucket: "basket" | "pie") =>
+    candidates
+      .filter((candidate) => candidate.buckets[bucket] !== null)
+      .toSorted(
+        (a, b) => (scoreFor(b, "latency", bucket) ?? 0) - (scoreFor(a, "latency", bucket) ?? 0),
+      )[0]
+  const basketLeader = best("basket")
+  const cairoLeader = best("pie")
+  const cairoCases = cairoLeader?.cases.filter((item) => item.family === "pie") ?? []
+  const baselineCairo = challenge.cases.flatMap((testCase) =>
+    testCase.family === "pie" && testCase.baseline.proofTimeS !== null
+      ? [testCase.baseline.proofTimeS]
+      : [],
+  )
+  const proved = challenge.cases.filter((testCase) => testCase.baseline.rounds > 0).length
+  const speedup = (candidate: Candidate | undefined, bucket: "basket" | "pie") =>
+    candidate === undefined
+      ? "—"
+      : `${formatNumber(scoreFor(candidate, "latency", bucket) ?? 1, 3)}×`
 
-  // Every figure uses the same timing scope as the scores (the contract's command time), and
-  // compares each candidate with its own paired baseline arm, never the proof stage alone.
-  const fullBasket = candidates
-    .filter((candidate) => candidate.buckets.basket !== null)
-    .toSorted(
-      (a, b) => (scoreFor(b, "latency", "basket") ?? 0) - (scoreFor(a, "latency", "basket") ?? 0),
-    )[0]
-  const cairo = candidates
-    .filter((candidate) => candidate.buckets.pie !== null)
-    .toSorted(
-      (a, b) => (scoreFor(b, "latency", "pie") ?? 0) - (scoreFor(a, "latency", "pie") ?? 0),
-    )[0]
-  const cairoCases = cairo?.cases.filter((item) => item.family === "pie") ?? []
-
+  // Every figure is proof execution time: the scored clock of this epoch.
   const stats: { label: string; value: string; hint?: string }[] =
     summary.ranked > 0
       ? [
@@ -55,40 +64,56 @@ export function ChallengeHero({
           })),
           { label: "Ranked", value: formatNumber(summary.ranked) },
         ]
-      : [
-          {
-            label: "Best full-basket latency",
-            value: fullBasket
-              ? `${formatNumber(scoreFor(fullBasket, "latency", "basket") ?? 1, 3)}×`
-              : "—",
-            ...(fullBasket ? { hint: `PR #${String(fullBasket.prNumber)} · 1 / R_T` } : {}),
-          },
-          {
-            label: "Best Cairo latency",
-            value: cairo ? `${formatNumber(scoreFor(cairo, "latency", "pie") ?? 1, 3)}×` : "—",
-            ...(cairo ? { hint: `PR #${String(cairo.prNumber)} · Cairo cases` } : {}),
-          },
-          cairoCases.length > 0
-            ? {
-                label: "Cairo command time",
-                value: seconds(cairoCases.map((item) => item.candidateS)),
-                hint: `was ${seconds(cairoCases.map((item) => item.baselineS))} (paired baseline)`,
-              }
-            : {
-                label: "Cairo command time",
-                value: seconds(
-                  challenge.cases
-                    .filter((testCase) => testCase.family === "pie")
-                    .map((testCase) => testCase.baseline.commandTimeS),
-                ),
-                hint: "pinned baseline",
-              },
-          {
-            label: "Activation",
-            value: `${String(gatesDone)} / ${String(challenge.gates.length)}`,
-            hint: `${formatNumber(candidates.length)} reviewed candidates`,
-          },
-        ]
+      : candidates.length > 0
+        ? [
+            {
+              label: "Best proof-time speedup",
+              value: speedup(basketLeader, "basket"),
+              hint:
+                basketLeader === undefined
+                  ? "no complete proof basket yet"
+                  : `PR #${String(basketLeader.prNumber)} · all jobs`,
+            },
+            {
+              label: "Best Cairo proof speedup",
+              value: speedup(cairoLeader, "pie"),
+              ...(cairoLeader
+                ? { hint: `PR #${String(cairoLeader.prNumber)} · Cairo proofs` }
+                : {}),
+            },
+            cairoCases.length > 0
+              ? {
+                  label: "Cairo proof time",
+                  value: seconds(cairoCases.map((item) => item.candidateS)),
+                  hint: `was ${seconds(cairoCases.map((item) => item.baselineS))} (paired baseline)`,
+                }
+              : { label: "Cairo proof time", value: seconds(baselineCairo), hint: "baseline" },
+            {
+              label: "Activation",
+              value: `${String(gatesDone)} / ${String(challenge.gates.length)}`,
+              hint: `${formatNumber(candidates.length)} reviewed candidates`,
+            },
+          ]
+        : [
+            {
+              label: "Jobs proved here",
+              value: `${String(proved)} / ${String(challenge.cases.length)}`,
+              hint: challenge.contract.hardware.gpu,
+            },
+            {
+              label: "Cairo proof time",
+              value: seconds(baselineCairo),
+              hint:
+                baselineCairo.length === 0
+                  ? "not yet proved on this host"
+                  : "baseline on this host",
+            },
+            { label: "Reviewed candidates", value: "0", hint: "open a PR to appear here" },
+            {
+              label: "Activation",
+              value: `${String(gatesDone)} / ${String(challenge.gates.length)}`,
+            },
+          ]
 
   return (
     <section id="overview" className="relative scroll-mt-24 pt-24 pb-10 sm:pt-28">
@@ -120,7 +145,12 @@ export function ChallengeHero({
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge status={challenge.status} />
                 <Badge>1× {challenge.contract.hardware.gpu}</Badge>
-                <Badge>{challenge.contract.epoch}</Badge>
+                <Badge>
+                  {challenge.contract.draft
+                    ? `${challenge.contract.epoch} · staging`
+                    : challenge.contract.epoch}
+                </Badge>
+                <BackendSwitcher challenge={challenge} />
               </div>
             </Reveal>
             <h1 className="mt-5 text-[clamp(2.5rem,5vw,4.5rem)] leading-[0.95] font-normal tracking-[-0.05em]">

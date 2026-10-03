@@ -37,7 +37,10 @@ function ChallengeCard({ challenge, scorecards, highlight }: ShowcaseEntry) {
       }))
     : [
         { label: "Public cases", value: formatNumber(challenge.cases.length) },
-        { label: "Fastest direct Cairo proof", value: formatSeconds(Math.min(...cairoTimes)) },
+        {
+          label: "Fastest direct Cairo proof",
+          value: cairoTimes.length === 0 ? "Pending" : formatSeconds(Math.min(...cairoTimes)),
+        },
         { label: "Ranked", value: "0" },
       ]
   const cairoCases = challenge.cases.flatMap((testCase) =>
@@ -65,9 +68,10 @@ function ChallengeCard({ challenge, scorecards, highlight }: ShowcaseEntry) {
             {highlight ? (
               <p className="mt-5 max-w-md border-l-2 border-accent pl-4 text-sm text-fg-muted">
                 <span className="text-accent">
-                  PR #{highlight.candidate.prNumber} · direct H200 research:
+                  PR #{highlight.candidate.prNumber} · direct {challenge.contract.hardware.gpu}{" "}
+                  research:
                 </span>{" "}
-                all {highlight.pieCount} public PIEs cut full-command time by{" "}
+                all {highlight.pieCount} public PIEs cut proof time by{" "}
                 {Math.round(highlight.pieReductionMin * 100)}–
                 {Math.round(highlight.pieReductionMax * 100)}%. Unranked.
               </p>
@@ -86,22 +90,27 @@ function ChallengeCard({ challenge, scorecards, highlight }: ShowcaseEntry) {
           {ranked ? (
             <>
               <div className="flex items-center justify-between text-label">
-                <span>Balanced leader</span>
+                <span>{challenge.tracks[0]?.name ?? ""} leader</span>
                 <span className="text-fg-muted">
-                  {formatScore(summary.leaders.balanced?.score ?? 1)}
+                  {formatScore(summary.leaders[challenge.tracks[0]?.id ?? "latency"]?.score ?? 1)}
                 </span>
               </div>
               <Sparkline
                 step
-                values={[1, ...summary.promotions.balanced.toReversed().map((p) => p.score)]}
+                values={[
+                  1,
+                  ...summary.promotions[challenge.tracks[0]?.id ?? "latency"]
+                    .toReversed()
+                    .map((p) => p.score),
+                ]}
                 className="h-40 w-full"
               />
             </>
           ) : (
             <>
               <div className="flex items-center justify-between gap-4 text-label">
-                <span>Direct Cairo proof stage · H200</span>
-                <span className="text-fg-muted">unranked reference</span>
+                <span>Direct Cairo proof stage · {challenge.contract.hardware.gpu}</span>
+                <span className="text-fg-muted">baseline</span>
               </div>
               <ul className="space-y-2.5">
                 {cairoCases.map((testCase) => (

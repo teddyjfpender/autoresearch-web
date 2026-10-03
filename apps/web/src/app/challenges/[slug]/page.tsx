@@ -5,7 +5,6 @@ import { notFound } from "next/navigation"
 import {
   getChallenge,
   getChallenges,
-  getIngressStudy,
   getProofProgress,
   getResearchCases,
   getResearchReviews,
@@ -14,11 +13,10 @@ import {
 import { ChallengeBoard } from "@/features/board/challenge-board"
 import { ChallengeDetails } from "@/features/board/challenge-details"
 import { DiscussionPanel } from "@/features/board/discussion-panel"
-import { IngressStudy } from "@/features/board/ingress-study"
 import { ChallengeHero } from "@/features/challenge/challenge-hero"
 import { ProgressChart } from "@/features/chart/progress-chart"
-import { ProofHistoryChart } from "@/features/chart/proof-history-chart"
-import { buildCandidates } from "@/lib/candidates"
+import { ProofTypes } from "@/features/board/proof-types"
+import { buildCandidates, historyMilestones } from "@/lib/candidates"
 import { getCommitDates, getResearchActivity } from "@/lib/github-research"
 import { summarize } from "@/lib/scoring"
 
@@ -42,15 +40,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ChallengePage({ params }: Props) {
   const { slug } = await params
-  const [challenge, scorecards, reviews, measurements, ingressStudy, proofProgress] =
-    await Promise.all([
-      getChallenge(slug),
-      getScorecards(slug),
-      getResearchReviews(slug),
-      getResearchCases(slug),
-      getIngressStudy(slug),
-      getProofProgress(slug),
-    ])
+  const [challenge, scorecards, reviews, measurements, proofProgress] = await Promise.all([
+    getChallenge(slug),
+    getScorecards(slug),
+    getResearchReviews(slug),
+    getResearchCases(slug),
+    getProofProgress(slug),
+  ])
   if (!challenge) notFound()
   const activity = await getResearchActivity(challenge.links.repo)
   const summary = summarize(challenge, scorecards)
@@ -64,15 +60,13 @@ export default async function ChallengePage({ params }: Props) {
     <>
       <ChallengeHero challenge={challenge} summary={summary} candidates={candidates} />
       <Container className="pb-24">
-        <div className="mb-6">
-          <ProofHistoryChart rows={proofProgress} />
-        </div>
         <ChallengeBoard
           candidates={candidates}
           families={challenge.families}
           tracks={challenge.tracks}
-          timeScope={challenge.contract.timeScope}
           baselineDate={challenge.contract.baselineMeasuredAt}
+          history={historyMilestones(proofProgress)}
+          proofs={<ProofTypes challenge={challenge} />}
           rankedChart={
             summary.ranked > 0 ? (
               <ProgressChart
@@ -92,7 +86,6 @@ export default async function ChallengePage({ params }: Props) {
           }
           details={<ChallengeDetails challenge={challenge} />}
         />
-        <IngressStudy rows={ingressStudy} />
       </Container>
     </>
   )

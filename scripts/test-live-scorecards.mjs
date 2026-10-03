@@ -69,6 +69,7 @@ const card = {
   perCase: [{ caseId: "pie:test", timeRatio: 0.8, memoryRatio: 0.9 }],
 }
 const contract = {
+  backend: "cuda",
   contractEpoch: "test-v1",
   baselineMeasuredAt: "2026-10-02",
   baselineQualification: "test",

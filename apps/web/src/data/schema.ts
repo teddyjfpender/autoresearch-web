@@ -37,6 +37,10 @@ export const stageSchema = z.object({
   output: z.string(),
   /** Whether the baseline run retained a proof-stage timer for this stage. */
   baselineTimed: z.boolean(),
+  /** Plain-language explanation for the Proofs tab. */
+  explainer: z.string(),
+  /** What goes into this proof, in plain language. */
+  inputs: z.string(),
 })
 
 /** One eligibility guard: a paired ratio must stay at or below `max`. */
@@ -62,6 +66,9 @@ export const familySchema = z.object({
   id: familyIdSchema,
   name: z.string(),
   description: z.string(),
+  /** Optional Proofs-tab explanation, for job types that combine several stages. */
+  explainer: z.string().optional(),
+  inputs: z.string().optional(),
 })
 
 /** Authored, per-case copy (content/). */
@@ -93,13 +100,16 @@ export const caseMeasuredSchema = z.object({
     runProofTimesS: z.array(z.number().positive()),
     /** What the proof-stage timer covers, or why it is unavailable. */
     proofTimeScope: z.string(),
-    /** Planned resident proving arena, bytes: diagnostic, unranked direct-run memory. */
-    arenaBytes: z.number().positive(),
-    /** Direct-run command time, matching the scored clock but not a ranked baseline. */
-    commandTimeS: z.number().positive(),
+    /** Planned resident proving arena, bytes, where the backend reports one. */
+    arenaBytes: z.number().positive().nullable(),
+    /** Direct-run command time (diagnostic only), where recorded. */
+    commandTimeS: z.number().positive().nullable(),
     ingressS: z.number().positive().optional(),
-    peakBytes: z.number().positive(),
-    rounds: z.number().int().positive(),
+    /** Peak device / physical memory during the run (capacity gate only). */
+    peakBytes: z.number().positive().nullable(),
+    rounds: z.number().int().nonnegative(),
+    /** Where this baseline number came from, e.g. "H200 direct qualification". */
+    source: z.string(),
   }),
 })
 
@@ -120,6 +130,7 @@ export const gateSchema = z.object({
 
 /** Contract facts imported from the repository's benchmark.json. */
 export const contractImportedSchema = z.object({
+  backend: z.enum(["cuda", "metal", "cpu"]),
   contractEpoch: z.string(),
   /** When the pinned baseline was measured on the reference hardware (UTC date). */
   baselineMeasuredAt: z.iso.date(),
@@ -129,9 +140,11 @@ export const contractImportedSchema = z.object({
   sourceCommit: sha(40),
   editablePaths: z.array(z.string()).min(1),
   hardware: z.object({
+    /** Host label, e.g. "NVIDIA H200 SXM" or "Apple M5 Max 64 GB". */
     gpu: z.string(),
+    /** Device, unified, or system memory available to the prover. */
     deviceBytes: z.number().positive(),
-    reserveBytes: z.number().positive(),
+    reserveBytes: z.number().positive().optional(),
   }),
   security: z.object({
     friQueries: z.number().int(),
@@ -161,7 +174,7 @@ const challengeBase = {
   headline: z.string(),
   status: z.enum(["live", "staging", "closed"]),
   summary: z.string(),
-  tracks: z.array(trackSchema).length(3),
+  tracks: z.array(trackSchema).min(1),
   stages: z.array(stageSchema).length(3),
   families: z.array(familySchema).length(3),
   tiers: z.array(tierSchema).min(1),
@@ -175,11 +188,28 @@ const challengeBase = {
   }),
 }
 
-/** What lives in content/challenges/<slug>/challenge.json. */
+/** One backend route of a shared challenge (e.g. CUDA, Metal, CPU). */
+export const backendContentSchema = z.object({
+  id: z.enum(["cuda", "metal", "cpu"]),
+  slug: z.string().regex(/^[a-z0-9-]+$/),
+  name: z.string(),
+  headline: z.string(),
+  summary: z.string(),
+})
+
+/**
+ * What lives in content/challenges/<family>/challenge.json: everything shared across
+ * backends, plus the list of backend routes it expands into.
+ */
 export const challengeContentSchema = z.object({
   ...challengeBase,
+  slug: z.never().optional(),
+  name: z.never().optional(),
+  headline: z.never().optional(),
+  summary: z.never().optional(),
   status: z.never().optional(),
   gates: z.never().optional(),
+  backends: z.array(backendContentSchema).min(1),
   contract: contractContentSchema,
   cases: z.array(caseContentSchema).min(1),
 })
@@ -187,6 +217,11 @@ export const challengeContentSchema = z.object({
 /** The joined challenge the UI renders: content + imported measurements. */
 export const challengeSchema = z.object({
   ...challengeBase,
+  backend: z.enum(["cuda", "metal", "cpu"]),
+  /** Sibling backend routes of the same challenge, for cross-links. */
+  siblings: z.array(
+    z.object({ id: z.enum(["cuda", "metal", "cpu"]), slug: z.string(), name: z.string() }),
+  ),
   contract: contractContentSchema.extend(contractImportedSchema.shape),
   cases: z.array(caseSchema).min(1),
 })

@@ -29,47 +29,52 @@ export function Hero({
   highlight: CandidateHighlight | null
 }) {
   const ranked = summary.ranked > 0
-  const score = (track: "latency" | "memory" | "balanced") => summary.leaders[track]?.score ?? 1
   const cairo = challenge.cases.flatMap((testCase) =>
     testCase.family === "pie" && testCase.baseline.proofTimeS !== null
       ? [testCase.baseline.proofTimeS]
       : [],
   )
-  // Real numbers only: ranked leaders once the judge is live, unranked direct H200 runs before that.
+  // Real numbers only: ranked leaders once the judge is live, unranked proof-stage research before.
+  const primary = challenge.tracks[0]
   const headline = ranked
-    ? score("latency")
+    ? (summary.leaders[primary?.id ?? "latency"]?.score ?? 1)
     : highlight
       ? highlight.fullBasketGain * 100
-      : Math.min(...cairo)
+      : cairo.length === 0
+        ? 0
+        : Math.min(...cairo)
   const blurb = ranked
-    ? "faster adapted-input-to-publication CUDA proving across Cairo proofs, wraps and folds, against the pinned baseline on one H200."
+    ? `faster proof execution across Cairo proofs, wraps and folds, against the pinned baseline on ${challenge.contract.hardware.gpu}.`
     : highlight
-      ? `unranked direct inverse-latency gain across PIE, recursion and pipeline cases for PR #${String(highlight.candidate.prNumber)}. All ${String(highlight.pieCount)} public PIE commands improved by ${String(Math.round(highlight.pieReductionMin * 100))}–${String(Math.round(highlight.pieReductionMax * 100))}%. This is research evidence, not a signed ranked score.`
-      : `unranked direct Cairo proof time on one H200: the fastest of ${String(cairo.length)} public cases on pinned stwo-zig. A proof-only ranking still needs wrap and fold timers and a new contract.`
+      ? `faster proof execution across every job for PR #${String(highlight.candidate.prNumber)}, with all ${String(highlight.pieCount)} Cairo proofs ${String(Math.round(highlight.pieReductionMin * 100))}–${String(Math.round(highlight.pieReductionMax * 100))}% quicker. Unranked research.`
+      : `baseline Cairo proof time on ${challenge.contract.hardware.gpu}: the fastest of ${String(cairo.length)} public jobs.`
   const figures = ranked
     ? [
-        { label: "Memory leader", value: formatScore(score("memory")), hint: "1 / R_M" },
-        {
-          label: "Balanced leader",
-          value: formatScore(score("balanced")),
-          hint: "1 / √(R_T · R_M)",
-        },
+        ...challenge.tracks.map((track) => ({
+          label: `${track.name} leader`,
+          value: formatScore(summary.leaders[track.id]?.score ?? 1),
+          hint: track.formula,
+        })),
         { label: "Ranked", value: formatNumber(summary.ranked), hint: "scorecards" },
       ]
     : [
         {
-          label: highlight ? "PIEs faster" : "Public cases",
+          label: highlight ? "Cairo proofs faster" : "Public jobs",
           value: highlight
             ? `${String(highlight.pieCount)}/${String(challenge.cases.filter((testCase) => testCase.family === "pie").length)}`
             : formatNumber(challenge.cases.length),
-          hint: highlight ? "whole command" : "hash-pinned basket",
+          hint: highlight ? "proof stage" : "hash-pinned basket",
         },
         {
           label: "Fastest Cairo proof",
-          value: `${Math.min(...cairo).toFixed(2)} s`,
-          hint: "proof phase; near unchanged",
+          value: cairo.length === 0 ? "—" : `${Math.min(...cairo).toFixed(2)} s`,
+          hint: "baseline proof stage",
         },
-        { label: "Ranked", value: "0", hint: "opens after activation" },
+        {
+          label: "Backends",
+          value: formatNumber(challenge.siblings.length),
+          hint: challenge.siblings.map((sibling) => sibling.id.toUpperCase()).join(" · "),
+        },
       ]
 
   return (

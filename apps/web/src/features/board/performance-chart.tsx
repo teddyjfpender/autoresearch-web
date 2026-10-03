@@ -1,5 +1,6 @@
 "use client"
 
+import { Badge } from "@autoresearch/ui/components/badge"
 import { Formula, SvgFormula } from "@autoresearch/ui/components/formula"
 import { SegmentedControl } from "@autoresearch/ui/components/segmented-control"
 import { formatNumber } from "@autoresearch/ui/lib/format"
@@ -7,7 +8,6 @@ import { AnimatePresence, motion } from "motion/react"
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react"
 
 import type { Track, TrackId } from "@/data/schema"
-import { formatDate, formatDateTime } from "@/lib/dates"
 import {
   allDated,
   chronological,
@@ -16,39 +16,18 @@ import {
   scoreFor,
   type BucketId,
   type Candidate,
+  type HistoryMilestone,
 } from "@/lib/candidates"
+import { formatDate, formatDateTime } from "@/lib/dates"
 import { METRICS } from "@/lib/metrics"
 
 import { createScale, extent } from "../chart/scales"
 
 const HEIGHT = 300
-const MARGIN = { top: 24, right: 28, bottom: 56, left: 72 }
+const MARGIN = { top: 28, right: 28, bottom: 56, left: 72 }
+const HISTORY_GAP = 32
 
 export type ChartMode = TrackId | "pareto"
-
-/** Ratio domain padded around its data, never narrower than ±5% so ticks stay readable. */
-function ratioDomain(values: readonly number[]): [number, number] {
-  const [lo, hi] = extent(values, 0.25)
-  const half = Math.max((hi - lo) / 2, 0.05)
-  const mid = (lo + hi) / 2
-  return [mid - half, mid + half]
-}
-
-const dateTimeShort = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-  timeZone: "UTC",
-})
-const formatDateTimeShort = (value: number) => dateTimeShort.format(new Date(value))
-
-/** Enough decimals to tell neighbouring ticks apart. */
-const tickDigits = (ticks: readonly number[]) => {
-  const step = ticks.length > 1 ? Math.abs((ticks[1] ?? 0) - (ticks[0] ?? 0)) : 1
-  return step < 0.01 ? 3 : 2
-}
 
 function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
   const ref = useRef<T>(null)
@@ -67,6 +46,29 @@ function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] 
   return [ref, width]
 }
 
+/** Ratio domain padded around its data, never narrower than ±5% so ticks stay readable. */
+function ratioDomain(values: readonly number[]): [number, number] {
+  const [lo, hi] = extent(values, 0.25)
+  const half = Math.max((hi - lo) / 2, 0.05)
+  const mid = (lo + hi) / 2
+  return [mid - half, mid + half]
+}
+
+/** Enough decimals to tell neighbouring ticks apart. */
+const tickDigits = (ticks: readonly number[]) => {
+  const step = ticks.length > 1 ? Math.abs((ticks[1] ?? 0) - (ticks[0] ?? 0)) : 1
+  return step < 0.01 ? 3 : 2
+}
+
+const dateTimeShort = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+  timeZone: "UTC",
+})
+
 interface Point {
   candidate: Candidate
   px: number
@@ -74,9 +76,29 @@ interface Point {
   highlight: boolean
 }
 
+interface Model {
+  points: Point[]
+  history: {
+    milestone: HistoryMilestone
+    px: number
+    py: number
+    lowY: number | null
+    highY: number | null
+  }[]
+  path: string
+  historyPath: string
+  area: string
+  baseline: { x: number; y: number }
+  xTicks: { value: number; px: number; label: string }[]
+  yTicks: number[]
+  y: (value: number) => number
+  timed: boolean
+}
+
 /**
- * Reviewed candidates scored like the judge: latency 1/R_T, memory 1/R_M, balanced
- * 1/√(R_T·R_M), or the R_T × R_M Pareto plane, for the whole basket or one job type.
+ * Proof-time speedup over the pinned baseline, one tab per job type. Candidates are placed in
+ * time; on the Cairo tab the modeled history sits to the left of the baseline. With more than
+ * one scored track, a track switch and the R_T × R_M Pareto plane appear as well.
  */
 export function PerformanceChart({
   candidates,
@@ -88,8 +110,8 @@ export function PerformanceChart({
   onBucketChange,
   selected,
   onSelect,
-  timeScope,
   baselineDate,
+  history,
 }: {
   candidates: readonly Candidate[]
   tracks: readonly Track[]
@@ -100,17 +122,19 @@ export function PerformanceChart({
   onBucketChange: (bucket: BucketId) => void
   selected: number | null
   onSelect: (prNumber: number) => void
-  timeScope: string
   /** When the pinned baseline was measured (ISO date); anchors the time axis. */
   baselineDate: string
+  /** Modeled milestones before the baseline, shown on the Cairo tab. */
+  history: readonly HistoryMilestone[]
 }) {
   const [hover, setHover] = useState<number | null>(null)
   const [containerRef, width] = useWidth<HTMLDivElement>()
   const innerWidth = Math.max(200, width - MARGIN.left - MARGIN.right)
   const innerHeight = HEIGHT - MARGIN.top - MARGIN.bottom
-  const track = tracks.find((item) => item.id === mode)
+  const multiTrack = tracks.length > 1
+  const track = tracks.find((item) => item.id === mode) ?? tracks[0]
 
-  const model = useMemo(() => {
+  const model = useMemo<Model>(() => {
     if (mode === "pareto") {
       const frontier = paretoIds(candidates, bucket)
       const measured = candidates.filter((candidate) => candidate.buckets[bucket] !== null)
@@ -127,7 +151,6 @@ export function PerformanceChart({
           highlight: frontier.has(candidate.prNumber),
         }
       })
-      // Staircase through the frontier, anchored at the baseline corner.
       const stairs = [
         { px: x(1), py: y(1) },
         ...points
@@ -141,76 +164,115 @@ export function PerformanceChart({
             ? `M${String(point.px)},${String(point.py)}`
             : `H${String(point.px)}V${String(point.py)}`
       }
+      const ticks = x.ticks(5)
       return {
         points,
+        history: [],
         path,
+        historyPath: "",
         area: "",
         baseline: { x: x(1), y: y(1) },
-        xTicks: x.ticks(5),
+        xTicks: ticks.map((value) => ({
+          value,
+          px: x(value),
+          label: formatNumber(value, tickDigits(ticks)),
+        })),
         yTicks: y.ticks(5),
-        x,
         y,
         timed: false,
-        formatX: (value: number) => formatNumber(value, tickDigits(x.ticks(5))),
       }
     }
 
-    // Time axis when every candidate is dated (head commit or PR open time), else PR order.
+    const trackId = track?.id ?? "latency"
+    const shownHistory = bucket === "pie" ? history : []
     const ordered = chronological(candidates)
     const timed = allDated(ordered)
+
+    // Horizontal layout: [history milestones] gap [baseline → candidates in time].
+    const historyWidth =
+      shownHistory.length === 0 ? 0 : Math.min(innerWidth * 0.38, shownHistory.length * 72)
+    const startX = historyWidth === 0 ? 0 : historyWidth + HISTORY_GAP
     const times = ordered.map((candidate) => Date.parse(candidate.measuredAt ?? ""))
     const start = Math.min(Date.parse(baselineDate), ...(timed ? times : []))
     const end = timed ? Math.max(...times, start + 3_600_000) : 0
     const span = end - start
-    const timeScale = createScale("lin", [start - span * 0.04, end + span * 0.04], [0, innerWidth])
-    const step = ordered.length > 0 ? innerWidth / ordered.length : 0
-    const xFor = (index: number) => (timed ? timeScale(times[index] ?? start) : (index + 1) * step)
-    const originX = timed ? timeScale(start) : 0
+    const timeScale = createScale("lin", [start, end + span * 0.04], [startX, innerWidth])
+    const step = ordered.length > 0 ? (innerWidth - startX) / ordered.length : 0
+    const xFor = (index: number) =>
+      timed ? timeScale(times[index] ?? start) : startX + (index + 1) * step
 
-    const values = ordered.flatMap((candidate) => {
-      const value = scoreFor(candidate, mode, bucket)
-      return value === null ? [] : [value]
-    })
+    const values = [
+      ...ordered.flatMap((candidate) => {
+        const value = scoreFor(candidate, trackId, bucket)
+        return value === null ? [] : [value]
+      }),
+      ...shownHistory.flatMap((item) => [
+        item.speedup,
+        item.low ?? item.speedup,
+        item.high ?? item.speedup,
+      ]),
+    ]
     const lo = Math.min(1, ...values)
     const hi = Math.max(1, ...values)
-    const pad = Math.max(0.02, (hi - lo) * 0.15)
+    const pad = Math.max(0.02, (hi - lo) * 0.12)
     const y = createScale("lin", [lo - pad, hi + pad], [innerHeight, 0])
-    const best = runningBest(ordered, mode, bucket)
-    let path = `M${String(originX)},${String(y(1))}`
+
+    const best = runningBest(ordered, trackId, bucket)
+    let path = `M${String(startX)},${String(y(1))}`
     for (const [index, value] of best.entries()) {
       path += `H${String(xFor(index))}V${String(y(value))}`
     }
     path += `H${String(innerWidth)}`
-    const points: Point[] = ordered.map((candidate, index) => {
-      const value = scoreFor(candidate, mode, bucket)
-      return {
-        candidate,
-        px: xFor(index),
-        py: value === null ? null : y(value),
-        highlight: value !== null && value === best[index] && value > 1,
-      }
-    })
-    const tickCount = 5
+
+    const historyStep = shownHistory.length > 1 ? historyWidth / (shownHistory.length - 1) : 0
+    const historyPoints = shownHistory.map((milestone, index) => ({
+      milestone,
+      px: shownHistory.length === 1 ? historyWidth / 2 : index * historyStep,
+      py: y(milestone.speedup),
+      lowY: milestone.low === null ? null : y(milestone.low),
+      highY: milestone.high === null ? null : y(milestone.high),
+    }))
+    const historyPath = historyPoints
+      .map((point, index) => `${index === 0 ? "M" : "L"}${String(point.px)},${String(point.py)}`)
+      .concat(historyPoints.length > 0 ? [`L${String(startX)},${String(y(1))}`] : [])
+      .join("")
+
+    const tickCount = 4
     const xTicks = timed
-      ? Array.from({ length: tickCount }, (_, index) => start + (span * index) / (tickCount - 1))
+      ? Array.from(
+          { length: tickCount },
+          (_, index) => start + (span * index) / (tickCount - 1),
+        ).map((value) => ({
+          value,
+          px: timeScale(value),
+          label:
+            span <= 3 * 86_400_000
+              ? dateTimeShort.format(new Date(value))
+              : formatDate(new Date(value).toISOString()),
+        }))
       : []
+
     return {
-      points,
+      points: ordered.map((candidate, index) => {
+        const value = scoreFor(candidate, trackId, bucket)
+        return {
+          candidate,
+          px: xFor(index),
+          py: value === null ? null : y(value),
+          highlight: value !== null && value === best[index] && value > 1,
+        }
+      }),
+      history: historyPoints,
       path,
-      area: `${path}V${String(innerHeight)}H${String(originX)}Z`,
-      baseline: { x: originX, y: y(1) },
+      historyPath,
+      area: `${path}V${String(innerHeight)}H${String(startX)}Z`,
+      baseline: { x: startX, y: y(1) },
       xTicks,
       yTicks: y.ticks(5),
-      x: timed ? timeScale : xFor,
       y,
       timed,
-      // Short spans need the time of day; longer ones read better as dates.
-      formatX: (value: number) =>
-        span <= 3 * 86_400_000
-          ? formatDateTimeShort(value)
-          : formatDate(new Date(value).toISOString()),
     }
-  }, [candidates, mode, bucket, innerWidth, innerHeight, baselineDate])
+  }, [candidates, mode, bucket, innerWidth, innerHeight, baselineDate, history, track])
 
   const onMove = (event: PointerEvent<SVGRectElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -228,36 +290,36 @@ export function PerformanceChart({
         nearest = point.candidate.prNumber
       }
     }
-    setHover(distance < 48 ? nearest : null)
+    setHover(distance < 40 ? nearest : null)
   }
 
   const hovered = model.points.find((point) => point.candidate.prNumber === hover)
   const bucketLabel = buckets.find((item) => item.value === bucket)?.label ?? ""
   const hoveredRatios = hovered ? hovered.candidate.buckets[bucket] : null
   const hoveredScore = hovered
-    ? scoreFor(hovered.candidate, mode === "pareto" ? "balanced" : mode, bucket)
+    ? scoreFor(hovered.candidate, mode === "pareto" ? (track?.id ?? "latency") : mode, bucket)
     : null
   const yTitle =
     mode === "pareto"
       ? `${METRICS.rTime.axis} (${METRICS.rTime.direction})`
-      : `${track?.name ?? ""} score · ${track?.formula ?? ""} (higher is better)`
+      : `${track?.name ?? ""} speedup · ${track?.formula ?? ""}`
+  const empty = candidates.every((candidate) => candidate.buckets[bucket] === null)
 
   return (
     <figure className="rounded-2xl border border-line p-4 sm:p-6">
       <figcaption className="flex flex-wrap items-start justify-between gap-4">
-        <div className="max-w-xl">
-          <p className="text-sm">
+        <div>
+          <p className="flex flex-wrap items-center gap-2 text-sm">
             {mode === "pareto" ? "Time vs. memory frontier" : `${track?.name ?? ""} vs. baseline`}
-            <span className="text-fg-faint"> · {bucketLabel}</span>
+            <Badge size="sm">unranked research</Badge>
           </p>
-          <p className="text-xs text-fg-faint">
+          <p className="mt-1 text-xs text-fg-faint">
             {mode === "pareto"
-              ? "Each dot is a reviewed candidate; the line joins those nothing beats on both axes."
-              : "Each dot is a reviewed candidate PR; the line is the best so far."}{" "}
-            {timeScope} Unranked direct measurements, not signed scores.
+              ? "The line joins candidates nothing beats on both axes."
+              : "Higher is faster. The line is the best candidate so far."}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        {multiTrack ? (
           <SegmentedControl
             aria-label="Chart track"
             size="sm"
@@ -271,28 +333,21 @@ export function PerformanceChart({
               { value: "pareto" as const, label: "Pareto" },
             ]}
           />
-          <SegmentedControl
-            aria-label="Job type"
-            size="sm"
-            value={bucket}
-            onValueChange={onBucketChange}
-            options={buckets}
-          />
-        </div>
+        ) : null}
       </figcaption>
 
-      <dl className="mt-5 grid gap-x-8 gap-y-2 border-t border-line pt-4 sm:grid-cols-2">
-        {[METRICS.rTime, METRICS.rMemory].map((metric) => (
-          <div key={metric.symbol} className="flex gap-3 text-xs">
-            <dt className="shrink-0 text-fg">
-              <Formula>{metric.symbol}</Formula>
-            </dt>
-            <dd className="text-fg-muted">
-              <span className="text-fg">{metric.name}</span> ÷ baseline, {metric.direction}.
-            </dd>
-          </div>
-        ))}
-      </dl>
+      <div className="mt-4 overflow-x-auto">
+        <SegmentedControl
+          aria-label="Proof job"
+          size="sm"
+          value={bucket}
+          onValueChange={(next) => {
+            onBucketChange(next)
+            setHover(null)
+          }}
+          options={buckets}
+        />
+      </div>
 
       <div ref={containerRef} className="relative mt-4 w-full" style={{ height: HEIGHT }}>
         <svg
@@ -301,8 +356,8 @@ export function PerformanceChart({
           role="img"
           aria-label={
             mode === "pareto"
-              ? `Proving time ratio against memory ratio for ${bucketLabel}`
-              : `${track?.name ?? ""} score per reviewed candidate for ${bucketLabel}`
+              ? `Proof time ratio against memory ratio for ${bucketLabel}`
+              : `${track?.name ?? ""} speedup per candidate for ${bucketLabel}`
           }
           className="overflow-visible"
         >
@@ -330,13 +385,13 @@ export function PerformanceChart({
             ))}
             {model.xTicks.map((tick) => (
               <text
-                key={tick}
-                x={model.x(tick)}
+                key={tick.value}
+                x={tick.px}
                 y={innerHeight + 22}
                 textAnchor="middle"
                 className="fill-fg-faint font-mono text-[10px]"
               >
-                {model.formatX(tick)}
+                {tick.label}
               </text>
             ))}
             <text
@@ -346,16 +401,6 @@ export function PerformanceChart({
             >
               <SvgFormula>{yTitle}</SvgFormula>
             </text>
-            {mode !== "pareto" && model.timed ? (
-              <text
-                x={innerWidth / 2}
-                y={innerHeight + 48}
-                textAnchor="middle"
-                className="fill-fg-muted text-[11px]"
-              >
-                Candidate head commit (UTC)
-              </text>
-            ) : null}
             {mode === "pareto" ? (
               <text
                 x={innerWidth / 2}
@@ -377,6 +422,64 @@ export function PerformanceChart({
                 strokeDasharray="3 5"
               />
             )}
+
+            {/* Modeled history: hollow points on a dashed line, with estimate whiskers. */}
+            {model.history.length === 0 ? null : (
+              <g>
+                <motion.path
+                  key={`history-${bucket}`}
+                  d={model.historyPath}
+                  fill="none"
+                  stroke="var(--ar-fg-faint)"
+                  strokeWidth={1.25}
+                  strokeDasharray="4 4"
+                  initial={{ pathLength: 0 }}
+                  animate={{ pathLength: 1 }}
+                  transition={{ duration: 1.2, ease: [0.76, 0, 0.24, 1] }}
+                />
+                {model.history.map((point) => (
+                  <g key={point.milestone.label}>
+                    {point.lowY === null || point.highY === null ? null : (
+                      <line
+                        x1={point.px}
+                        x2={point.px}
+                        y1={point.lowY}
+                        y2={point.highY}
+                        stroke="var(--ar-fg-faint)"
+                        strokeOpacity={0.5}
+                        strokeWidth={6}
+                        strokeLinecap="round"
+                      />
+                    )}
+                    <circle
+                      cx={point.px}
+                      cy={point.py}
+                      r={3.5}
+                      fill="var(--ar-bg)"
+                      stroke="var(--ar-fg-faint)"
+                      strokeWidth={1.5}
+                      strokeDasharray="2 2"
+                    />
+                    <text
+                      x={point.px}
+                      y={innerHeight + 22}
+                      textAnchor="middle"
+                      className="fill-fg-faint font-mono text-[10px]"
+                    >
+                      {point.milestone.label}
+                    </text>
+                  </g>
+                ))}
+                <line
+                  x1={model.baseline.x - HISTORY_GAP / 2}
+                  x2={model.baseline.x - HISTORY_GAP / 2}
+                  y1={0}
+                  y2={innerHeight}
+                  stroke="var(--ar-line)"
+                />
+              </g>
+            )}
+
             <circle
               cx={model.baseline.x}
               cy={model.baseline.y}
@@ -386,8 +489,8 @@ export function PerformanceChart({
               strokeWidth={1.5}
             />
             <text
-              x={model.baseline.x + (mode === "pareto" || model.timed ? 8 : 0)}
-              y={mode === "pareto" || model.timed ? model.baseline.y - 8 : innerHeight + 22}
+              x={model.baseline.x + 8}
+              y={model.baseline.y - 8}
               className="fill-fg-faint font-mono text-[10px]"
             >
               baseline
@@ -418,30 +521,20 @@ export function PerformanceChart({
             {model.points.map((point) => {
               const active =
                 selected === point.candidate.prNumber || hover === point.candidate.prNumber
+              const label = `#${String(point.candidate.prNumber)}`
               return (
                 <g key={point.candidate.prNumber}>
-                  {mode === "pareto" || model.timed ? null : (
+                  {mode === "pareto" || model.timed || point.py === null ? null : (
                     <text
                       x={point.px}
                       y={innerHeight + 22}
                       textAnchor="middle"
                       className="fill-fg-faint font-mono text-[10px]"
                     >
-                      #{point.candidate.prNumber}
+                      {label}
                     </text>
                   )}
-                  {point.py === null ? (
-                    <text
-                      x={point.px}
-                      y={model.timed ? innerHeight - 6 : innerHeight + 36}
-                      textAnchor="middle"
-                      className="fill-fg-faint text-[9px]"
-                    >
-                      {model.timed
-                        ? `#${String(point.candidate.prNumber)} not measured`
-                        : "not measured"}
-                    </text>
-                  ) : (
+                  {point.py === null ? null : (
                     <>
                       <circle
                         cx={point.px}
@@ -451,29 +544,18 @@ export function PerformanceChart({
                         stroke={point.highlight ? "var(--ar-bg)" : "var(--ar-fg-muted)"}
                         strokeWidth={point.highlight ? 2 : 1.5}
                       />
-                      {mode !== "pareto" && model.timed ? (
+                      {mode === "pareto" || model.timed ? (
                         <text
-                          x={point.px}
-                          y={point.py - 10}
-                          textAnchor="middle"
-                          className="fill-fg-faint font-mono text-[10px]"
-                        >
-                          #{point.candidate.prNumber}
-                        </text>
-                      ) : null}
-                      {mode === "pareto" ? (
-                        <text
-                          // Flip the label left when it would collide with the baseline's.
-                          {...(Math.hypot(
-                            point.px - model.baseline.x,
-                            point.py - model.baseline.y,
-                          ) < 48
+                          {...(mode === "pareto" &&
+                          Math.hypot(point.px - model.baseline.x, point.py - model.baseline.y) < 48
                             ? { x: point.px - 9, textAnchor: "end" }
-                            : { x: point.px + 9 })}
-                          y={point.py + 3}
+                            : mode === "pareto"
+                              ? { x: point.px + 9 }
+                              : { x: point.px, textAnchor: "middle" })}
+                          y={mode === "pareto" ? point.py + 3 : point.py - 10}
                           className="fill-fg-faint font-mono text-[10px]"
                         >
-                          #{point.candidate.prNumber}
+                          {label}
                         </text>
                       ) : null}
                     </>
@@ -498,9 +580,11 @@ export function PerformanceChart({
           </g>
         </svg>
 
-        {candidates.every((candidate) => candidate.buckets[bucket] === null) ? (
+        {empty ? (
           <p className="pointer-events-none absolute inset-x-0 top-6 text-center text-sm text-fg-muted">
-            No reviewed candidate has measured every {bucketLabel.toLowerCase()} case yet.
+            {candidates.length === 0
+              ? "No reviewed candidates yet. The baseline holds."
+              : `No candidate has a proof-only time for every ${bucketLabel.toLowerCase()} job yet.`}
           </p>
         ) : null}
 
@@ -523,9 +607,9 @@ export function PerformanceChart({
                 #{hovered.candidate.prNumber} · {hovered.candidate.title}
               </p>
               {hoveredRatios === null ? (
-                <p className="mt-2 text-fg-faint">{bucketLabel}: not every case measured</p>
+                <p className="mt-2 text-fg-faint">{bucketLabel}: not every job timed</p>
               ) : (
-                <dl className="mt-2 grid grid-cols-3 gap-2 font-mono tabular">
+                <dl className="mt-2 grid grid-cols-2 gap-2 font-mono tabular">
                   <div>
                     <dt className="text-fg-faint">
                       <Formula>R_T</Formula>
@@ -533,15 +617,7 @@ export function PerformanceChart({
                     <dd>{formatNumber(hoveredRatios.rTime, 3)}</dd>
                   </div>
                   <div>
-                    <dt className="text-fg-faint">
-                      <Formula>R_M</Formula>
-                    </dt>
-                    <dd>{formatNumber(hoveredRatios.rMemory, 3)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-fg-faint">
-                      {mode === "pareto" ? "balanced" : (track?.name.toLowerCase() ?? "")}
-                    </dt>
+                    <dt className="text-fg-faint">speedup</dt>
                     <dd>{hoveredScore === null ? "—" : `${formatNumber(hoveredScore, 3)}×`}</dd>
                   </div>
                 </dl>
@@ -552,11 +628,29 @@ export function PerformanceChart({
                   {formatDateTime(hovered.candidate.measuredAt)}
                 </p>
               )}
-              <p className="mt-2 text-fg-faint">Click to open its breakdown</p>
             </motion.div>
           ) : null}
         </AnimatePresence>
       </div>
+
+      {model.history.length === 0 ? null : (
+        <ul
+          className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-fg-faint"
+          aria-label="Legend"
+        >
+          <li className="flex items-center gap-1.5">
+            <span aria-hidden className="size-2 rounded-full bg-accent" />
+            measured
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className="size-2 rounded-full border border-dashed border-fg-faint"
+            />
+            modeled
+          </li>
+        </ul>
+      )}
     </figure>
   )
 }

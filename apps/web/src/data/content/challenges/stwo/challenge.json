@@ -1,0 +1,211 @@
+{
+  "contract": {
+    "epoch": "proof-v2",
+    "draft": true,
+    "timeScope": "Proof execution only: witness generation, commitments, composition, FRI, proof of work and finishing, summed over every Cairo, wrap and fold proof in a job. Loading, setup, publication and verification are excluded.",
+    "memoryScope": "Peak memory must fit the host; it is a capacity gate, never part of the score.",
+    "minImprovement": 0.01,
+    "pairedRounds": 3,
+    "bootstrapResamples": 2000
+  },
+  "tracks": [
+    {
+      "id": "latency",
+      "name": "Proof time",
+      "objective": "Fastest proof execution across the Cairo, fold and pipeline jobs.",
+      "formula": "1 / R_T",
+      "guards": [],
+      "why": "Proof execution is the work every prover pays for, whatever the surrounding service does."
+    }
+  ],
+  "families": [
+    {
+      "id": "pie",
+      "name": "Cairo proofs",
+      "description": "Standalone Cairo proofs of single- and multi-block Starknet PIEs, chosen to stress different builtins. Only the Cairo prover-call interval is scored."
+    },
+    {
+      "id": "recursion",
+      "name": "Fold proofs",
+      "description": "Canonical multiverifier folds over distinct, already wrapped and verified circuit leaves. Only fold prover-call intervals are scored."
+    },
+    {
+      "id": "pipeline",
+      "name": "Cairo → wrap → fold",
+      "description": "Adapted PIEs all the way to one recursive root: every Cairo proof, every wrap and every fold, in one case.",
+      "explainer": "Prove each PIE, wrap each Cairo proof into a leaf, then fold leaves into one root. Every prover-call interval counts; loading, setup, publication and verification are reported separately.",
+      "inputs": "Two or more consecutive PIEs whose state roots chain from one block range to the next."
+    }
+  ],
+  "cases": [
+    {
+      "id": "pie:15582797_15582797",
+      "title": "EC + Poseidon",
+      "description": "One-block elliptic-curve and Poseidon outlier.",
+      "stages": ["cairo"]
+    },
+    {
+      "id": "pie:15603744_15603744",
+      "title": "Bitwise",
+      "description": "One-block bitwise outlier.",
+      "stages": ["cairo"]
+    },
+    {
+      "id": "pie:15581148_15581148",
+      "title": "Range-check 96 + mod",
+      "description": "One-block range-check-96 and modular arithmetic outlier.",
+      "stages": ["cairo"]
+    },
+    {
+      "id": "pie:15590913_15590913",
+      "title": "Pedersen",
+      "description": "One-block Pedersen outlier.",
+      "stages": ["cairo"]
+    },
+    {
+      "id": "pie:15588777_15588780",
+      "title": "Four-block mix",
+      "description": "Four contiguous blocks with a high step count.",
+      "stages": ["cairo"]
+    },
+    {
+      "id": "pie:15591789_15591789",
+      "title": "Near capacity",
+      "description": "One-block, EC-heavy, close to the device memory ceiling.",
+      "stages": ["cairo"]
+    },
+    {
+      "id": "recursion:two-leaf-wrap-fold",
+      "title": "Two-leaf fold",
+      "description": "One fold proof over two distinct, already wrapped circuit leaves.",
+      "stages": ["fold"]
+    },
+    {
+      "id": "recursion:eight-distinct-pie-fold",
+      "title": "Eight-leaf tree",
+      "description": "Seven fold proofs over eight state-continuous ten-block mainnet leaves.",
+      "stages": ["fold"]
+    },
+    {
+      "id": "pipeline:two-leaf-root",
+      "title": "Two leaves to a root",
+      "description": "Two Cairo proofs, two wraps and one fold, ending in a single recursive root.",
+      "stages": ["cairo", "wrap", "fold"]
+    }
+  ],
+  "tiers": [
+    {
+      "id": "intake",
+      "name": "Intake",
+      "gpu": false,
+      "description": "Patch paths, file types, size and base commit are checked without running candidate code. Under a minute."
+    },
+    {
+      "id": "smoke",
+      "name": "Smoke",
+      "gpu": true,
+      "description": "A trusted worker rebuilds from source, runs focused tests, then one PIE and one recursion case with independent verification."
+    },
+    {
+      "id": "qualify",
+      "name": "Qualify",
+      "gpu": true,
+      "description": "The public basket plus a private holdout, once each, with exact security and output gates."
+    },
+    {
+      "id": "rank",
+      "name": "Rank",
+      "gpu": true,
+      "description": "Fresh A/A calibration and at least three paired ABBA rounds of proof execution time. Capacity and exact verification are gates; the trusted receipt is signed."
+    }
+  ],
+  "participate": [
+    {
+      "title": "Set up the proof epoch",
+      "body": "Creates the pinned baseline and editable source for this backend and checks the protected timer files.",
+      "command": "python3 challenge.py setup-proof --backend {backend}"
+    },
+    {
+      "title": "Edit the backend",
+      "body": "Change only this backend's editable paths in workspace/proof-v2-source. Timer-owning files are fixed and hash-checked."
+    },
+    {
+      "title": "Capture the patch",
+      "body": "Writes candidate/proof-v2-changes.patch and validates the backend's edit surface.",
+      "command": "python3 challenge.py capture-proof --backend {backend}"
+    },
+    {
+      "title": "Check the contract",
+      "body": "Validates the patch against the staged proof-only contract before asking for a judged run.",
+      "command": "python3 harness/check_contract.py --config benchmark-proof-v2.json"
+    }
+  ],
+  "rules": [
+    "Only proof execution is timed: Cairo, wrap and fold proof intervals, summed per job.",
+    "Every job must reproduce its exact reference proof or root and pass independent verification.",
+    "No proof may be skipped, cached from an earlier request, or moved outside the recorded intervals.",
+    "Timer-owning files are protected; a candidate cannot edit, forge or truncate them.",
+    "Each backend is scored only against its own pinned baseline on the same host.",
+    "Memory is a capacity gate: a job that does not fit fails qualification."
+  ],
+  "links": {
+    "repo": "https://github.com/teddyjfpender/stwo-cuda-challenge",
+    "discussions": "https://github.com/teddyjfpender/stwo-cuda-challenge/discussions",
+    "prover": "https://github.com/teddyjfpender/stwo-zig"
+  },
+  "stages": [
+    {
+      "id": "cairo",
+      "name": "Cairo proof",
+      "summary": "Proves an adapted Starknet PIE with the Stwo Cairo AIR on the selected backend.",
+      "input": "Adapted PIE (.cpi)",
+      "output": "Cairo proof",
+      "baselineTimed": true,
+      "explainer": "The base proof. The Stwo prover runs the Cairo AIR over the execution trace in a PIE and produces a STARK proof that the Starknet OS executed those blocks correctly: every memory access, builtin call and state transition. It is by far the largest proof here, and where most proving time goes.",
+      "inputs": "A PIE (Position Independent Execution) is the complete execution record the Starknet OS produces when it runs one or more consecutive blocks: memory, builtin segments and the program's public output, relocatable so it can be proved anywhere. It is adapted into a compact prover input (CPI) before timing starts."
+    },
+    {
+      "id": "wrap",
+      "name": "Wrap",
+      "summary": "Proves, inside a circuit, that a Cairo proof verifies. The result is a uniform circuit leaf that recursion can consume.",
+      "input": "Cairo proof",
+      "output": "Circuit leaf proof",
+      "baselineTimed": false,
+      "explainer": "A recursion step. A circuit proof attests that the Cairo proof verifies, and re-expresses it in the uniform shape that folding understands, whatever the original PIE looked like.",
+      "inputs": "One Cairo proof and its public statement (the blocks and outputs it covers)."
+    },
+    {
+      "id": "fold",
+      "name": "Fold",
+      "summary": "One canonical multiverifier proof that verifies two child proofs. Folds repeat until a single root remains.",
+      "input": "Two circuit proofs",
+      "output": "Parent proof, then the root",
+      "baselineTimed": false,
+      "explainer": "A multiverifier circuit proof that verifies two child proofs at once and binds their ordered outputs, so state continuity across blocks is preserved. Folds repeat pairwise until a single root proof covers every leaf.",
+      "inputs": "Two circuit proofs: wrapped leaves, or the results of earlier folds."
+    }
+  ],
+  "backends": [
+    {
+      "id": "cuda",
+      "slug": "stwo-cuda",
+      "name": "Stwo CUDA",
+      "headline": "Prove Starknet faster on one H200.",
+      "summary": "Cut the time the CUDA prover spends proving: Cairo proofs of Starknet blocks, the wraps that turn them into circuit leaves, and the folds that reduce leaves to one root. Only proof execution is scored."
+    },
+    {
+      "id": "metal",
+      "slug": "stwo-metal",
+      "name": "Stwo Metal",
+      "headline": "Prove Starknet faster on Apple silicon.",
+      "summary": "The same nine proof jobs on the Metal backend of an M5 Max: Cairo proofs, wraps and folds over shared, hash-pinned inputs. Only proof execution is scored, against Metal's own baseline."
+    },
+    {
+      "id": "cpu",
+      "slug": "stwo-cpu",
+      "name": "Stwo CPU",
+      "headline": "Prove Starknet faster on the CPU.",
+      "summary": "The same nine proof jobs on the CPU backend of an M5 Max: Cairo proofs, wraps and folds over shared, hash-pinned inputs. Only proof execution is scored, against the CPU's own baseline."
+    }
+  ]
+}

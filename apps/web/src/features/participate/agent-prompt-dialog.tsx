@@ -6,30 +6,25 @@ import { Check, Copy, X } from "lucide-react"
 import { useId, useRef } from "react"
 
 function agentPrompt(repositoryUrl: string): string {
-  return `Help me participate in the public Stwo CUDA challenge:
+  return `Help me test the proof-only Stwo challenge:
 ${repositoryUrl}
 
-Clone the challenge repository and work from its root. Read TASK.md, AGENTS.md, skills/stwo-cuda-challenge/SKILL.md, spec/CODE_MAP.md, spec/SUBMISSIONS.md, and spec/ACTIVATION.md before editing. The challenge targets fast CUDA proving of Starknet Cairo PIEs, wraps, and recursive folds on one H200. Research PRs and GitHub Discussions are open; ranked H200 judging is still in staging.
+Clone the challenge repository and work from its root. Read TASK.md, AGENTS.md, spec/PROOF_STAGE_EPOCH.md, spec/WORKLOADS.md, and spec/SUBMISSIONS.md before editing. Pick one backend: CUDA on an H200, or Metal or CPU on the M5 Max. The staged proof-only basket contains the same six public PIEs, two folds, and one unique PIE-to-root pipeline on each backend. Ranked judging is not yet active; trial results are reviewable research.
 
 Start with:
 git clone ${repositoryUrl}.git
 cd stwo-cuda-challenge
 git lfs pull
 python3 challenge.py check-data
-python3 challenge.py setup
-python3 challenge.py paths
+python3 challenge.py setup-proof --backend BACKEND --build
 
-Setup creates ./workspace/stwo-zig/ (singular workspace). It is Git-ignored and absent from a fresh clone. Edit production prover code ONLY under these five directories inside that checkout:
-src/backends/cuda/
-src/integrations/cairo_cuda/
-src/integrations/circuit_cuda/
-src/products/cairo_cuda/
-src/products/circuit_recursion_cuda/
-spec/CODE_MAP.md names exact entry files. Use CPU, Metal, and Rust code only as references. Do not alter security settings, fixtures, judge code, or reference outputs.
+Replace BACKEND with cuda, metal, or cpu. Setup creates the Git-ignored source under ./workspace/proof-v2-source/. Edit only that backend's editable paths in benchmark-proof-v2.json. The timer-owning source files, security settings, fixtures, judge, and expected proof bytes are protected.
 
-Choose a measurable bottleneck, explain your hypothesis, run focused checks, and record proof-stage and full-command times separately. The existing h200-v1 command-time judge is not yet a live proving-time leaderboard; do not claim a ranked result from local timings. On a prepared H200, run python3 challenge.py setup --build and python3 challenge.py benchmark --tier smoke --track balanced before qualifying the full basket.
+Choose a substantial prover bottleneck, state the expected gain, run a focused compile check, then run one exact PIE or fold:
+python3 challenge.py benchmark-proof --backend BACKEND --case-id recursion:two-leaf-wrap-fold --out ./proof-trial
+Use the full basket only after a promising smoke check. Report proof-stage time, full-command time, peak memory, proof hashes, and verification separately. A direct diagnostic is not a ranked score. CUDA needs the prepared H200 assets and Rust verifiers described in spec/H200_RUNBOOK.md.
 
-When ready, run python3 challenge.py capture. Complete candidate/NOTES.md with changed paths, mechanism, before/after measurements, proof checks, regressions, and attribution. Commit candidate/changes.patch and candidate/NOTES.md to your fork, open a review PR against the challenge repository, and link relevant GitHub Discussions. No API key is needed to start.`
+When ready, run python3 challenge.py capture-proof --backend BACKEND. Commit candidate/proof-v2-changes.patch and a short note with changed paths, mechanism, before/after evidence, proof checks, and tradeoffs. Open a review PR against this challenge repository and link relevant GitHub Discussions. No API key is needed to start.`
 }
 
 export function AgentPromptDialog({

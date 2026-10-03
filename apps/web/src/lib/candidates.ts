@@ -10,7 +10,7 @@ export interface CandidateCase {
   caseId: string
   title: string
   family: FamilyId
-  /** candidate / baseline time; < 1 is faster. */
+  /** candidate / baseline proof-stage time; < 1 is faster. */
   ratio: number
   /** candidate / baseline peak memory; < 1 is leaner. */
   memoryRatio: number
@@ -59,8 +59,14 @@ export interface Candidate {
 
 const FAMILIES: readonly FamilyId[] = ["pie", "recursion", "pipeline"]
 
-const ratioOf = (row: ResearchCase) =>
-  row.medianPairedCommandRatio ?? row.candidateCommandS / row.baselineCommandS
+/**
+ * Paired proof-stage times for one research row, or null when either arm lacks a proof-only
+ * interval. Whole-command time is never used: the epoch scores proof execution only.
+ */
+const proofTimes = (row: ResearchCase) =>
+  row.baselineProofS === null || row.candidateProofS === null
+    ? null
+    : { baseline: row.baselineProofS, candidate: row.candidateProofS }
 
 const geomean = (values: readonly number[]) =>
   Math.exp(values.reduce((sum, value) => sum + Math.log(value), 0) / values.length)
@@ -80,16 +86,17 @@ export function buildCandidates(
       )
       const cases = challenge.cases.flatMap((testCase) => {
         const row = rows.find((item) => item.caseId === testCase.id)
-        return row
+        const times = row === undefined ? null : proofTimes(row)
+        return row && times
           ? [
               {
                 caseId: testCase.id,
                 title: testCase.title,
                 family: testCase.family,
-                ratio: ratioOf(row),
+                ratio: times.candidate / times.baseline,
                 memoryRatio: row.candidatePeakGiBRounded / row.baselinePeakGiBRounded,
-                baselineS: row.baselineCommandS,
-                candidateS: row.candidateCommandS,
+                baselineS: times.baseline,
+                candidateS: times.candidate,
                 baselinePeakGiB: row.baselinePeakGiBRounded,
                 candidatePeakGiB: row.candidatePeakGiBRounded,
               },
@@ -253,4 +260,53 @@ export function candidateHighlight(candidates: readonly Candidate[]): CandidateH
     pieReductionMax: Math.max(...reductions),
     fullBasketGain: candidate.basketSpeedup - 1,
   }
+}
+
+export interface HistoryMilestone {
+  label: string
+  order: number
+  /** Baseline ÷ milestone proof time over the Cairo cases; < 1 means slower than baseline. */
+  speedup: number
+  low: number | null
+  high: number | null
+}
+
+/**
+ * Modeled pre-baseline milestones from the proof-progress table, expressed as Cairo-proof
+ * speedup against the same pinned baseline the candidates are measured against.
+ */
+export function historyMilestones(
+  rows: readonly {
+    kind: string
+    milestone: string
+    order: number
+    proofS: number
+    lowS: number | null
+    highS: number | null
+  }[],
+): HistoryMilestone[] {
+  const baselineRows = rows.filter((row) => row.kind === "challenge_baseline")
+  if (baselineRows.length === 0) return []
+  const baseline = geomean(baselineRows.map((row) => row.proofS))
+  const groups = new Map<string, typeof rows>()
+  for (const row of rows) {
+    if (row.kind !== "historical_model") continue
+    const key = `${String(row.order)}:${row.milestone}`
+    groups.set(key, [...(groups.get(key) ?? []), row])
+  }
+  return [...groups.values()]
+    .map((group) => {
+      const first = group[0]
+      const lows = group.flatMap((row) => (row.lowS === null ? [] : [row.lowS]))
+      const highs = group.flatMap((row) => (row.highS === null ? [] : [row.highS]))
+      return {
+        label: first?.milestone ?? "",
+        order: first?.order ?? 0,
+        speedup: baseline / geomean(group.map((row) => row.proofS)),
+        // A slower bound in seconds is a lower speedup, so the ends swap.
+        low: highs.length === group.length ? baseline / geomean(highs) : null,
+        high: lows.length === group.length ? baseline / geomean(lows) : null,
+      }
+    })
+    .toSorted((a, b) => a.order - b.order)
 }
