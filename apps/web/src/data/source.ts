@@ -15,6 +15,7 @@ import {
   type Scorecard,
   type ResearchReview,
   type ResearchCase,
+  type ProofProgress,
   type Site,
 } from "./schema"
 
@@ -96,6 +97,10 @@ export const getResearchReviews = cache(async (slug: string): Promise<readonly R
 
 export const getResearchCases = cache(async (slug: string): Promise<readonly ResearchCase[]> =>
   slug === "stwo-cuda" ? (await getChallengeRepositoryData()).researchCases : [],
+)
+
+export const getProofProgress = cache(async (slug: string): Promise<readonly ProofProgress[]> =>
+  slug === "stwo-cuda" ? (await getChallengeRepositoryData()).proofProgress : [],
 )
 
 export const getIngressStudy = cache(async (slug: string) =>

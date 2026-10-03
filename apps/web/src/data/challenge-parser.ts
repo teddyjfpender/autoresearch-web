@@ -4,6 +4,7 @@ import {
   caseMeasuredSchema,
   contractImportedSchema,
   researchCaseSchema,
+  proofProgressSchema,
   researchReviewSchema,
   gateSchema,
 } from "./schema"
@@ -197,34 +198,42 @@ export function parseChallengeFiles(
       decision: row["decision"] ?? "",
     })),
   )
+  const researchRows = readTsv(sources.research)
   const researchCases = researchCaseSchema.array().parse(
-    readTsv(sources.research).map((row) => ({
-      prNumber: required(row["pr_number"], "research pr_number"),
-      headSha: row["head_sha"] ?? "",
-      patchSha256: row["patch_sha256"] ?? "",
-      evidenceSha256: row["evidence_sha256"] ?? "",
-      caseId: row["case_id"] ?? "",
-      family: row["family"] ?? "",
-      qualification: row["qualification"] ?? "",
-      samplesPerArm: required(row["samples_per_arm"], "samples_per_arm"),
-      timeScope: row["time_scope"] ?? "",
-      proofScope: row["proof_scope"] ?? "",
-      baselineCommandS: required(row["baseline_command_s"], "baseline_command_s"),
-      candidateCommandS: required(row["candidate_command_s"], "candidate_command_s"),
-      medianPairedCommandRatio: num(row["median_paired_command_ratio"]),
-      baselineProofS: num(row["baseline_proof_s"]),
-      candidateProofS: num(row["candidate_proof_s"]),
-      baselineIngressS: num(row["baseline_ingress_s"]),
-      candidateIngressS: num(row["candidate_ingress_s"]),
-      baselinePeakGiBRounded: required(
-        row["baseline_peak_gib_rounded"],
-        "baseline_peak_gib_rounded",
-      ),
-      candidatePeakGiBRounded: required(
-        row["candidate_peak_gib_rounded"],
-        "candidate_peak_gib_rounded",
-      ),
-    })),
+    researchRows
+      .filter(
+        (row) =>
+          row["record_kind"] === undefined ||
+          row["record_kind"] === "" ||
+          row["record_kind"] === "submission",
+      )
+      .map((row) => ({
+        prNumber: required(row["pr_number"], "research pr_number"),
+        headSha: row["head_sha"] ?? "",
+        patchSha256: row["patch_sha256"] ?? "",
+        evidenceSha256: row["evidence_sha256"] ?? "",
+        caseId: row["case_id"] ?? "",
+        family: row["family"] ?? "",
+        qualification: row["qualification"] ?? "",
+        samplesPerArm: required(row["samples_per_arm"], "samples_per_arm"),
+        timeScope: row["time_scope"] ?? "",
+        proofScope: row["proof_scope"] ?? "",
+        baselineCommandS: required(row["baseline_command_s"], "baseline_command_s"),
+        candidateCommandS: required(row["candidate_command_s"], "candidate_command_s"),
+        medianPairedCommandRatio: num(row["median_paired_command_ratio"]),
+        baselineProofS: num(row["baseline_proof_s"]),
+        candidateProofS: num(row["candidate_proof_s"]),
+        baselineIngressS: num(row["baseline_ingress_s"]),
+        candidateIngressS: num(row["candidate_ingress_s"]),
+        baselinePeakGiBRounded: required(
+          row["baseline_peak_gib_rounded"],
+          "baseline_peak_gib_rounded",
+        ),
+        candidatePeakGiBRounded: required(
+          row["candidate_peak_gib_rounded"],
+          "candidate_peak_gib_rounded",
+        ),
+      })),
   )
   const reviewIds = new Set(reviews.map((review) => review.prNumber))
   if (reviewIds.size !== reviews.length) throw new Error("Duplicate reviewed PR")
@@ -239,6 +248,55 @@ export function parseChallengeFiles(
       !fixture.cases.some((item) => item.id === row.caseId)
     )
       throw new Error(`Research row is not bound to a reviewed PR and public case: ${row.caseId}`)
+  }
+  const publicPieIds = new Set(
+    fixture.cases.filter((item) => item.family === "pie").map((item) => item.id),
+  )
+  const proofProgress = proofProgressSchema.array().parse(
+    researchRows.flatMap((row) => {
+      if (
+        row["family"] !== "pie" ||
+        row["candidate_proof_s"] === undefined ||
+        row["candidate_proof_s"] === ""
+      )
+        return []
+      const kind =
+        row["record_kind"] === undefined || row["record_kind"] === ""
+          ? "submission"
+          : row["record_kind"]
+      return [
+        {
+          caseId: row["case_id"] ?? "",
+          kind,
+          milestone:
+            row["milestone"] === undefined || row["milestone"] === ""
+              ? `PR #${row["pr_number"] ?? ""}`
+              : row["milestone"],
+          order: num(row["timeline_order"]) ?? 100 + required(row["pr_number"], "proof pr_number"),
+          proofS: required(row["candidate_proof_s"], "candidate_proof_s"),
+          lowS: num(row["estimate_low_s"]),
+          highS: num(row["estimate_high_s"]),
+          method: row["estimate_method"] ?? "",
+          sourceReceipts: row["source_receipts"] ?? "",
+          prNumber: num(row["pr_number"]),
+        },
+      ]
+    }),
+  )
+  for (const row of proofProgress) {
+    if (!publicPieIds.has(row.caseId)) throw new Error(`Unknown proof-progress PIE: ${row.caseId}`)
+  }
+  const progressGroups = new Map<string, typeof proofProgress>()
+  for (const row of proofProgress) {
+    const key = `${String(row.order)}:${row.kind}:${row.milestone}`
+    progressGroups.set(key, [...(progressGroups.get(key) ?? []), row])
+  }
+  for (const [key, rows] of progressGroups) {
+    if (
+      rows.length !== publicPieIds.size ||
+      new Set(rows.map((row) => row.caseId)).size !== publicPieIds.size
+    )
+      throw new Error(`Incomplete six-PIE proof progress point: ${key}`)
   }
   const ingressStudy = z
     .array(
@@ -279,5 +337,5 @@ export function parseChallengeFiles(
       throw new Error(`Invalid H200 ingress A/B pair: ${cohort}`)
   }
   if (ingressStudy.length !== 4) throw new Error("Unexpected H200 ingress A/B rows")
-  return { activation, contract, cases, reviews, researchCases, ingressStudy }
+  return { activation, contract, cases, reviews, researchCases, proofProgress, ingressStudy }
 }

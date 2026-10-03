@@ -267,6 +267,20 @@ export const researchCaseSchema = z.object({
   candidatePeakGiBRounded: z.number().positive(),
 })
 
+/** Same public PIE cases throughout the modeled history, baseline, and PR research. */
+export const proofProgressSchema = z.object({
+  caseId: z.string().min(1),
+  kind: z.enum(["historical_model", "challenge_baseline", "submission"]),
+  milestone: z.string().min(1),
+  order: z.number().int().nonnegative(),
+  proofS: z.number().positive(),
+  lowS: z.number().positive().nullable(),
+  highS: z.number().positive().nullable(),
+  method: z.string(),
+  sourceReceipts: z.string(),
+  prNumber: z.number().int().positive().nullable(),
+})
+
 /** Platform-level content: the landing page and shell, independent of any one challenge. */
 export const siteSchema = z.object({
   name: z.string(),
@@ -297,4 +311,5 @@ export type CaseResult = z.infer<typeof caseResultSchema>
 export type Scorecard = z.infer<typeof scorecardSchema>
 export type ResearchReview = z.infer<typeof researchReviewSchema>
 export type ResearchCase = z.infer<typeof researchCaseSchema>
+export type ProofProgress = z.infer<typeof proofProgressSchema>
 export type Site = z.infer<typeof siteSchema>
