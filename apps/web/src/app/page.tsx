@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 import {
   getChallenge,
   getChallenges,
+  getProofProgress,
   getResearchCases,
   getResearchReviews,
   getScorecards,
@@ -14,7 +15,12 @@ import { StepsSection } from "@/features/how/steps-section"
 import { ChallengeShowcase } from "@/features/landing/challenge-showcase"
 import { Participate } from "@/features/participate/participate"
 import { summarize } from "@/lib/scoring"
-import { buildCandidates, candidateHighlight } from "@/lib/candidates"
+import {
+  buildCandidates,
+  cairoProgress,
+  candidateHighlight,
+  historyMilestones,
+} from "@/lib/candidates"
 import { getCommitDates, getResearchActivity } from "@/lib/github-research"
 
 export const revalidate = 300
@@ -29,10 +35,11 @@ export default async function HomePage() {
   if (!featured) notFound()
   const entries = await Promise.all(
     challenges.map(async (challenge) => {
-      const [scorecards, reviews, measurements] = await Promise.all([
+      const [scorecards, reviews, measurements, proofProgress] = await Promise.all([
         getScorecards(challenge.slug),
         getResearchReviews(challenge.slug),
         getResearchCases(challenge.slug),
+        getProofProgress(challenge.slug),
       ])
       const activity = await getResearchActivity(challenge.links.repo)
       const commitDates = await getCommitDates(
@@ -46,18 +53,27 @@ export default async function HomePage() {
         activity.pulls,
         commitDates,
       )
-      return { challenge, scorecards, highlight: candidateHighlight(candidates) }
+      return {
+        challenge,
+        scorecards,
+        candidates: candidates.length,
+        highlight: candidateHighlight(candidates),
+        progress: cairoProgress(candidates, historyMilestones(proofProgress)),
+      }
     }),
   )
-  const featuredHighlight =
-    entries.find((entry) => entry.challenge.slug === featured.slug)?.highlight ?? null
+  const featuredEntry = entries.find((entry) => entry.challenge.slug === featured.slug)
 
   return (
     <>
       <Hero
-        challenge={featured}
+        site={site}
+        challenges={challenges}
+        featured={featured}
         summary={summarize(featured, featuredScorecards)}
-        highlight={featuredHighlight}
+        highlight={featuredEntry?.highlight ?? null}
+        progress={featuredEntry?.progress ?? null}
+        candidates={entries.reduce((total, entry) => total + entry.candidates, 0)}
       />
       <ChallengeShowcase entries={entries} proposeUrl={featured.links.discussions} />
       <StepsSection

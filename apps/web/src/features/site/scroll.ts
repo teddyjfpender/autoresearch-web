@@ -4,6 +4,8 @@ import type Lenis from "lenis"
 
 /** Clearance for the fixed header. Keep in sync with `scroll-mt-24` on sections. */
 export const SCROLL_OFFSET = 96
+/** Breathing room kept between the header and a section's first line. */
+const CONTENT_GAP = 32
 
 let instance: Lenis | null = null
 
@@ -39,7 +41,13 @@ export function scrollToHash(hash: string, { immediate = false } = {}): boolean 
   const target = id === "" ? null : document.getElementById(id)
   if (id !== "" && !target) return false
   // Resolve to an absolute pixel position ourselves so CSS `scroll-margin` isn't applied twice.
-  const top = target ? target.getBoundingClientRect().top + window.scrollY - SCROLL_OFFSET : 0
+  // Land on the section's content, not its top padding, so the heading sits under the header.
+  const padding = target
+    ? Math.max(0, Number.parseFloat(getComputedStyle(target).paddingTop) - CONTENT_GAP)
+    : 0
+  const top = target
+    ? target.getBoundingClientRect().top + window.scrollY + padding - SCROLL_OFFSET
+    : 0
   if (instance) {
     instance.scrollTo(Math.max(0, top), {
       immediate,

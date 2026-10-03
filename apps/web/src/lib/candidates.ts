@@ -341,3 +341,28 @@ export function firstProofTimes(
     seconds: new Map(group.map((row) => [row.caseId, row.proofS])),
   }
 }
+
+/** Cairo proof speedup from the first recorded milestone to the best reviewed candidate. */
+export interface CairoProgress {
+  since: string
+  speedup: number
+  /** Share of Cairo proof time removed since the first milestone, 0–1. */
+  reduction: number
+}
+
+export function cairoProgress(
+  candidates: readonly Candidate[],
+  history: readonly HistoryMilestone[],
+): CairoProgress | null {
+  const first = history[0]
+  if (first === undefined) return null
+  const best = Math.max(
+    1,
+    ...candidates.flatMap((candidate) => {
+      const value = scoreFor(candidate, "latency", "pie")
+      return value === null ? [] : [value]
+    }),
+  )
+  const speedup = best / first.speedup
+  return { since: first.label, speedup, reduction: 1 - 1 / speedup }
+}

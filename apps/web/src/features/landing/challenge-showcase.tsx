@@ -1,6 +1,8 @@
 import { Button } from "@autoresearch/ui/components/button"
+import { Carousel } from "@autoresearch/ui/components/carousel"
 import { Container, Eyebrow, Heading, Section } from "@autoresearch/ui/components/layout"
 import { formatNumber } from "@autoresearch/ui/lib/format"
+import { NumberTicker } from "@autoresearch/ui/motion/number-ticker"
 import { Reveal } from "@autoresearch/ui/motion/reveal"
 import { Spotlight } from "@autoresearch/ui/motion/spotlight"
 import { ArrowUpRight, Plus } from "lucide-react"
@@ -8,7 +10,7 @@ import { ArrowUpRight, Plus } from "lucide-react"
 import type { Challenge, Scorecard } from "@/data/schema"
 import { formatScore, formatSeconds } from "@/lib/format"
 import { routes } from "@/lib/routes"
-import type { CandidateHighlight } from "@/lib/candidates"
+import type { CairoProgress, CandidateHighlight } from "@/lib/candidates"
 import { summarize } from "@/lib/scoring"
 
 import { StatusBadge } from "../challenge/status-badge"
@@ -19,9 +21,27 @@ export interface ShowcaseEntry {
   challenge: Challenge
   scorecards: readonly Scorecard[]
   highlight: CandidateHighlight | null
+  progress: CairoProgress | null
 }
 
-function ChallengeCard({ challenge, scorecards, highlight }: ShowcaseEntry) {
+/** The figure a card leads with: proof time removed, from the strongest evidence available. */
+function improvement({ progress, highlight }: ShowcaseEntry): { value: number; label: string } {
+  if (progress)
+    return {
+      value: progress.reduction * 100,
+      label: `less Cairo proof time since ${progress.since}`,
+    }
+  if (highlight)
+    return {
+      value: (1 - 1 / (1 + highlight.fullBasketGain)) * 100,
+      label: `less proof time across every job · PR #${String(highlight.candidate.prNumber)}`,
+    }
+  return { value: 0, label: "improvement so far · the baseline holds" }
+}
+
+function ChallengeCard(entry: ShowcaseEntry) {
+  const { challenge, scorecards, highlight } = entry
+  const lead = improvement(entry)
   const summary = summarize(challenge, scorecards)
   const ranked = summary.ranked > 0
   const cairoTimes = challenge.cases.flatMap((testCase) =>
@@ -70,8 +90,14 @@ function ChallengeCard({ challenge, scorecards, highlight }: ShowcaseEntry) {
             <StatusBadge status={challenge.status} />
             <span className="font-mono text-xs text-fg-faint">/{challenge.slug}</span>
           </div>
+          <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
+            <p className="text-[clamp(3.5rem,8vw,6.5rem)] leading-[0.85] font-light tracking-[-0.06em] text-accent tabular">
+              <NumberTicker value={lead.value} suffix="%" />
+            </p>
+            <p className="max-w-[16rem] pb-1 text-sm leading-snug text-fg-muted">{lead.label}</p>
+          </div>
           <div>
-            <h3 className="text-4xl font-normal tracking-[-0.04em] sm:text-5xl">
+            <h3 className="text-3xl font-normal tracking-[-0.04em] sm:text-4xl">
               {challenge.name}
             </h3>
             <p className="mt-4 max-w-md text-fg-muted">{challenge.summary}</p>
@@ -190,33 +216,40 @@ export function ChallengeShowcase({
           </Reveal>
         </div>
 
-        <div className="mt-14 grid gap-4 lg:grid-cols-3">
-          {entries.map((entry, index) => (
-            <Reveal key={entry.challenge.slug} delay={index * 0.08} className="lg:col-span-2">
-              <ChallengeCard {...entry} />
-            </Reveal>
-          ))}
-          <Reveal delay={0.12}>
-            <div className="flex h-full flex-col justify-between gap-10 rounded-2xl border border-dashed border-line p-6 sm:p-10">
-              <span className="inline-flex size-12 items-center justify-center rounded-full border border-line text-fg-faint">
-                <Plus className="size-5" />
-              </span>
-              <div>
-                <h3 className="text-2xl font-normal tracking-tight">Next race</h3>
-                <p className="mt-3 text-fg-muted">
-                  Have a proving bottleneck with a clean, verifiable score? Propose it as the next
-                  challenge.
-                </p>
-              </div>
-              <Button asChild variant="outline" className="self-start">
-                <a href={proposeUrl} target="_blank" rel="noreferrer">
-                  Propose a challenge
-                  <ArrowUpRight />
-                </a>
-              </Button>
-            </div>
-          </Reveal>
-        </div>
+        <Reveal delay={0.1} className="mt-14">
+          <Carousel
+            label="Challenges"
+            slides={[
+              ...entries.map((entry) => ({
+                id: entry.challenge.slug,
+                content: <ChallengeCard {...entry} />,
+              })),
+              {
+                id: "next-race",
+                content: (
+                  <div className="flex h-full flex-col justify-between gap-10 rounded-2xl border border-dashed border-line p-6 sm:p-10">
+                    <span className="inline-flex size-12 items-center justify-center rounded-full border border-line text-fg-faint">
+                      <Plus className="size-5" />
+                    </span>
+                    <div>
+                      <h3 className="text-2xl font-normal tracking-tight">Next race</h3>
+                      <p className="mt-3 text-fg-muted">
+                        Have a proving bottleneck with a clean, verifiable score? Propose it as the
+                        next challenge.
+                      </p>
+                    </div>
+                    <Button asChild variant="outline" className="self-start">
+                      <a href={proposeUrl} target="_blank" rel="noreferrer">
+                        Propose a challenge
+                        <ArrowUpRight />
+                      </a>
+                    </Button>
+                  </div>
+                ),
+              },
+            ]}
+          />
+        </Reveal>
       </Container>
     </Section>
   )

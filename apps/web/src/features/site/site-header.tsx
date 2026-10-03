@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from "react"
 
 import { routes } from "@/lib/routes"
 
-import { AgentPromptDialog } from "../participate/agent-prompt-dialog"
+import { AgentPromptDialog, type PromptChallenge } from "../participate/agent-prompt-dialog"
 
 import { Logo } from "./logo"
 import { navFor, type NavItem } from "./nav"
@@ -50,13 +50,18 @@ function useActiveSection(items: readonly NavItem[], pathname: string): string |
 export function SiteHeader({
   name,
   featuredSlug,
-  repositoryUrl,
+  challenges,
 }: {
   name: string
   featuredSlug: string
-  repositoryUrl: string
+  /** Participation targets by slug; the prompt only appears on a challenge's own pages. */
+  challenges: readonly (PromptChallenge & { slug: string })[]
 }) {
   const pathname = usePathname()
+  const current = challenges.find((challenge) => {
+    const base = routes.challenge(challenge.slug)
+    return pathname === base || pathname.startsWith(`${base}/`)
+  })
   const nav = useMemo(() => navFor(pathname, featuredSlug), [pathname, featuredSlug])
   const { scrollY } = useScroll()
   const [scrolled, setScrolled] = useState(false)
@@ -134,7 +139,7 @@ export function SiteHeader({
 
         <div className="flex items-center gap-1">
           <ThemeToggle />
-          <AgentPromptDialog repositoryUrl={repositoryUrl} />
+          {current ? <AgentPromptDialog challenge={current} /> : null}
           <Button asChild size="sm" className="hidden h-10 px-4 sm:inline-flex">
             <SectionLink href={nav.cta.href}>
               {nav.cta.label}

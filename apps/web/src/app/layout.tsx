@@ -41,8 +41,8 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const [site, challenges] = await Promise.all([getSite(), getChallenges()])
-  const featured = challenges.find((challenge) => challenge.slug === site.featuredChallenge)
-  if (!featured) throw new Error("Featured challenge is missing")
+  if (!challenges.some((challenge) => challenge.slug === site.featuredChallenge))
+    throw new Error("Featured challenge is missing")
   return (
     <html
       lang="en"
@@ -66,7 +66,13 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           <SiteHeader
             name={site.name}
             featuredSlug={site.featuredChallenge}
-            repositoryUrl={featured.links.repo}
+            challenges={challenges.map((challenge) => ({
+              slug: challenge.slug,
+              name: challenge.name,
+              backend: challenge.backend,
+              host: challenge.contract.hardware.gpu,
+              repositoryUrl: challenge.links.repo,
+            }))}
           />
           <main id="main">{children}</main>
           <SiteFooter site={site} challenges={challenges} />

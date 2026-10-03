@@ -8,74 +8,76 @@ import { Reveal } from "@autoresearch/ui/motion/reveal"
 import { SplitText } from "@autoresearch/ui/motion/split-text"
 import { ArrowRight, ArrowUpRight } from "lucide-react"
 
-import type { Challenge } from "@/data/schema"
-import { formatScore } from "@/lib/format"
+import type { Challenge, Site } from "@/data/schema"
 import { routes } from "@/lib/routes"
 import type { Summary } from "@/lib/scoring"
-import type { CandidateHighlight } from "@/lib/candidates"
+import type { CairoProgress, CandidateHighlight } from "@/lib/candidates"
 
-import { StatusBadge } from "../challenge/status-badge"
-import { AgentPromptDialog } from "../participate/agent-prompt-dialog"
 import { SectionLink } from "../site/section-link"
 import { WarpField } from "./warp-field"
 
 export function Hero({
-  challenge,
+  site,
+  challenges,
+  featured,
   summary,
   highlight,
+  progress,
+  candidates,
 }: {
-  challenge: Challenge
+  site: Site
+  challenges: readonly Challenge[]
+  featured: Challenge
   summary: Summary
   highlight: CandidateHighlight | null
+  progress: CairoProgress | null
+  candidates: number
 }) {
   const ranked = summary.ranked > 0
-  const cairo = challenge.cases.flatMap((testCase) =>
-    testCase.family === "pie" && testCase.baseline.proofTimeS !== null
-      ? [testCase.baseline.proofTimeS]
-      : [],
-  )
-  // Real numbers only: ranked leaders once the judge is live, unranked proof-stage research before.
-  const primary = challenge.tracks[0]
-  const headline = ranked
-    ? (summary.leaders[primary?.id ?? "latency"]?.score ?? 1)
-    : highlight
-      ? highlight.fullBasketGain * 100
-      : cairo.length === 0
-        ? 0
-        : Math.min(...cairo)
-  const blurb = ranked
-    ? `faster proof execution across Cairo proofs, wraps and folds, against the pinned baseline on ${challenge.contract.hardware.gpu}.`
-    : highlight
-      ? `faster proof execution across every job for PR #${String(highlight.candidate.prNumber)}, with all ${String(highlight.pieCount)} Cairo proofs ${String(Math.round(highlight.pieReductionMin * 100))}–${String(Math.round(highlight.pieReductionMax * 100))}% quicker. Unranked research.`
-      : `baseline Cairo proof time on ${challenge.contract.hardware.gpu}: the fastest of ${String(cairo.length)} public jobs.`
-  const figures = ranked
-    ? [
-        ...challenge.tracks.map((track) => ({
-          label: `${track.name} leader`,
-          value: formatScore(summary.leaders[track.id]?.score ?? 1),
-          hint: track.formula,
-        })),
-        { label: "Ranked", value: formatNumber(summary.ranked), hint: "scorecards" },
-      ]
-    : [
-        {
-          label: highlight ? "Cairo proofs faster" : "Public jobs",
-          value: highlight
-            ? `${String(highlight.pieCount)}/${String(challenge.cases.filter((testCase) => testCase.family === "pie").length)}`
-            : formatNumber(challenge.cases.length),
-          hint: highlight ? "proof stage" : "hash-pinned basket",
+  const primary = featured.tracks[0]
+  const gpu = featured.contract.hardware.gpu
+  const backends = challenges.map((challenge) => challenge.backend.toUpperCase()).join(" · ")
+  // Real numbers only: ranked leaders once the judge is live; otherwise the Cairo proof time
+  // removed since the first recorded prover, then the latest reviewed candidate.
+  const lead = ranked
+    ? {
+        value: summary.leaders[primary?.id ?? "latency"]?.score ?? 1,
+        digits: 2,
+        suffix: "×",
+        blurb: `faster proof execution across Cairo proofs, wraps and folds on ${featured.name}, ranked against the pinned baseline on ${gpu}.`,
+      }
+    : progress
+      ? {
+          value: progress.reduction * 100,
+          digits: 0,
+          suffix: "%",
+          blurb: `less Cairo proof time on ${featured.name} since ${progress.since}, the first recorded prover: ${formatNumber(progress.speedup, 1)}× faster on ${gpu}. Unranked research.`,
+        }
+      : highlight
+        ? {
+            value: highlight.fullBasketGain * 100,
+            digits: 1,
+            suffix: "%",
+            blurb: `faster proof execution across every ${featured.name} job for PR #${String(highlight.candidate.prNumber)}. Unranked research.`,
+          }
+        : null
+  const figures = [
+    { label: "Challenges", value: formatNumber(challenges.length), hint: backends },
+    progress
+      ? {
+          label: "Cairo proofs",
+          value: `${formatNumber(progress.speedup, 1)}×`,
+          hint: `faster since ${progress.since}`,
+        }
+      : {
+          label: "Public jobs",
+          value: formatNumber(featured.cases.length),
+          hint: "shared across backends",
         },
-        {
-          label: "Fastest Cairo proof",
-          value: cairo.length === 0 ? "—" : `${Math.min(...cairo).toFixed(2)} s`,
-          hint: "baseline proof stage",
-        },
-        {
-          label: "Backends",
-          value: formatNumber(challenge.siblings.length),
-          hint: challenge.siblings.map((sibling) => sibling.id.toUpperCase()).join(" · "),
-        },
-      ]
+    ranked
+      ? { label: "Ranked", value: formatNumber(summary.ranked), hint: "scorecards" }
+      : { label: "Reviewed candidates", value: formatNumber(candidates), hint: "open PRs" },
+  ]
 
   return (
     <section className="relative isolate flex min-h-svh flex-col justify-end overflow-hidden pt-32 pb-10">
@@ -85,39 +87,38 @@ export function Hero({
 
       <Container>
         <Reveal y={12}>
-          <div className="flex flex-wrap items-center gap-3">
-            <StatusBadge status={challenge.status} />
-            <span className="text-label">
-              {challenge.name} · {challenge.contract.epoch} · 1× {challenge.contract.hardware.gpu}
-            </span>
-          </div>
+          <p className="text-label">{site.tagline}</p>
         </Reveal>
 
-        <h1 className="mt-8 max-w-[14ch] text-[clamp(3.25rem,11vw,10.5rem)] leading-[0.88] font-normal tracking-[-0.055em]">
-          <SplitText text="Make Stwo" className="block" />
-          <span className="block">
-            <SplitText
-              text="fly"
-              delay={0.18}
-              wordClassName="font-display font-normal italic text-accent pr-[0.06em]"
-            />{" "}
-            <SplitText text="on GPUs." delay={0.26} />
-          </span>
+        <h1 className="mt-8 text-[clamp(2.5rem,10vw,9.5rem)] leading-[0.9] font-normal tracking-[-0.055em] whitespace-nowrap">
+          <SplitText text="autoresearch" />
+          <SplitText
+            text=".fun"
+            delay={0.18}
+            wordClassName="font-display font-normal italic text-accent pr-[0.06em]"
+          />
         </h1>
+        <Reveal delay={0.35}>
+          <p className="mt-8 max-w-2xl text-lg leading-relaxed text-fg-muted">{site.summary}</p>
+        </Reveal>
 
-        <div className="mt-20 grid gap-12 border-t border-line pt-10 lg:grid-cols-[1.3fr_1fr] lg:items-end">
+        <div className="mt-14 grid gap-12 border-t border-line pt-10 lg:grid-cols-[1.3fr_1fr] lg:items-end">
           <Reveal delay={0.5}>
-            <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
-              <p className="text-[clamp(3rem,6.5vw,5.75rem)] leading-[0.85] font-light tracking-[-0.06em] tabular">
-                <NumberTicker
-                  value={headline}
-                  fractionDigits={highlight && !ranked ? 1 : 2}
-                  suffix={ranked ? "×" : highlight ? "%" : " s"}
-                  delay={0.6}
-                />
-              </p>
-              <p className="max-w-xs pb-1 leading-relaxed text-fg-muted">{blurb}</p>
-            </div>
+            {lead === null ? (
+              <div />
+            ) : (
+              <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+                <p className="text-[clamp(3rem,6.5vw,5.75rem)] leading-[0.85] font-light tracking-[-0.06em] tabular">
+                  <NumberTicker
+                    value={lead.value}
+                    fractionDigits={lead.digits}
+                    suffix={lead.suffix}
+                    delay={0.6}
+                  />
+                </p>
+                <p className="max-w-xs pb-1 leading-relaxed text-fg-muted">{lead.blurb}</p>
+              </div>
+            )}
           </Reveal>
 
           <Reveal delay={0.65}>
@@ -141,17 +142,16 @@ export function Hero({
           <div className="mt-12 flex flex-wrap items-center gap-2">
             <Magnetic>
               <Button asChild size="lg">
-                <SectionLink href={routes.challenge(challenge.slug)}>
-                  Enter the challenge
+                <SectionLink href={routes.homeSection("challenges")}>
+                  See the challenges
                   <ArrowUpRight className="transition-transform duration-500 ease-out-expo group-hover/button:rotate-45" />
                 </SectionLink>
               </Button>
             </Magnetic>
-            <AgentPromptDialog repositoryUrl={challenge.links.repo} size="lg" />
             <Magnetic>
               <Button asChild size="lg" variant="ghost">
-                <SectionLink href={routes.challengeSection(challenge.slug, "leaderboard")}>
-                  See the leaderboard
+                <SectionLink href={routes.challengeSection(featured.slug, "leaderboard")}>
+                  {featured.name} leaderboard
                   <ArrowRight className="transition-transform duration-500 ease-out-expo group-hover/button:translate-x-0.5" />
                 </SectionLink>
               </Button>

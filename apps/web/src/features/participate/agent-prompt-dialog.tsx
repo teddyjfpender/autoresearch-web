@@ -5,39 +5,48 @@ import { useCopy } from "@autoresearch/ui/hooks/use-copy"
 import { Check, Copy, X } from "lucide-react"
 import { useId, useRef } from "react"
 
-function agentPrompt(repositoryUrl: string): string {
-  return `Help me test the proof-only Stwo challenge:
+/** The challenge an agent is pointed at: one backend of the shared proof basket. */
+export interface PromptChallenge {
+  name: string
+  backend: string
+  host: string
+  repositoryUrl: string
+}
+
+function agentPrompt({ name, backend, host, repositoryUrl }: PromptChallenge): string {
+  const repo = new URL(repositoryUrl).pathname.split("/").at(-1) ?? ""
+  return `Find the largest optimisation that improves the benchmarks in this challenge: ${name}, cutting Stwo proof time on the ${backend.toUpperCase()} backend (${host}).
 ${repositoryUrl}
 
-Clone the challenge repository and work from its root. Read TASK.md, AGENTS.md, spec/PROOF_STAGE_EPOCH.md, spec/WORKLOADS.md, and spec/SUBMISSIONS.md before editing. Pick one backend: CUDA on an H200, or Metal or CPU on the M5 Max. The staged proof-only basket contains the same six public PIEs, two folds, and one unique PIE-to-root pipeline on each backend. Ranked judging is not yet active; trial results are reviewable research.
+Clone the challenge repository and work from its root. Read TASK.md, AGENTS.md, spec/PROOF_STAGE_EPOCH.md, spec/WORKLOADS.md, and spec/SUBMISSIONS.md before editing. The proof-only basket is six public PIEs, two folds, and one PIE-to-root pipeline. Only proof execution is scored, against this backend's own baseline; ranked judging is not yet active, so trial results are reviewable research.
 
 Start with:
 git clone ${repositoryUrl}.git
-cd stwo-cuda-challenge
+cd ${repo}
 git lfs pull
 python3 challenge.py check-data
-python3 challenge.py setup-proof --backend BACKEND --build
+python3 challenge.py setup-proof --backend ${backend} --build
 
-Replace BACKEND with cuda, metal, or cpu. Setup creates the Git-ignored source under ./workspace/proof-v2-source/. Edit only that backend's editable paths in benchmark-proof-v2.json. The timer-owning source files, security settings, fixtures, judge, and expected proof bytes are protected.
+Setup creates the Git-ignored source under ./workspace/proof-v2-source/. Edit only the ${backend} editable paths in benchmark-proof-v2.json. The timer-owning source files, security settings, fixtures, judge, and expected proof bytes are protected.
 
-Choose a substantial prover bottleneck, state the expected gain, run a focused compile check, then run one exact PIE or fold:
-python3 challenge.py benchmark-proof --backend BACKEND --case-id recursion:two-leaf-wrap-fold --out ./proof-trial
-Use the full basket only after a promising smoke check. Report proof-stage time, full-command time, peak memory, proof hashes, and verification separately. A direct diagnostic is not a ranked score. CUDA needs the prepared H200 assets and Rust verifiers described in spec/H200_RUNBOOK.md.
+Profile first and go after the biggest prover bottleneck you can find. State the expected gain, run a focused compile check, then run one exact PIE or fold:
+python3 challenge.py benchmark-proof --backend ${backend} --case-id recursion:two-leaf-wrap-fold --out ./proof-trial
+Use the full basket only after a promising smoke check. Report proof-stage time, peak memory, proof hashes, and verification separately. A direct diagnostic is not a ranked score.${backend === "cuda" ? " CUDA needs the prepared H200 assets and Rust verifiers described in spec/H200_RUNBOOK.md." : ""}
 
-When ready, run python3 challenge.py capture-proof --backend BACKEND. Commit candidate/proof-v2-changes.patch and a short note with changed paths, mechanism, before/after evidence, proof checks, and tradeoffs. Open a review PR against this challenge repository and link relevant GitHub Discussions. No API key is needed to start.`
+When ready, run python3 challenge.py capture-proof --backend ${backend}. Commit candidate/proof-v2-changes.patch and a short note with changed paths, mechanism, before/after evidence, proof checks, and tradeoffs. Open a review PR against this challenge repository and link relevant GitHub Discussions. No API key is needed to start.`
 }
 
 export function AgentPromptDialog({
-  repositoryUrl,
+  challenge,
   size = "sm",
 }: {
-  repositoryUrl: string
+  challenge: PromptChallenge
   size?: "sm" | "lg"
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   const { copied, copy } = useCopy()
-  const prompt = agentPrompt(repositoryUrl)
+  const prompt = agentPrompt(challenge)
   return (
     <>
       <Button
