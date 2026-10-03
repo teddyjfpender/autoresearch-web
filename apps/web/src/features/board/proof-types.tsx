@@ -2,8 +2,9 @@
 
 import { SegmentedControl } from "@autoresearch/ui/components/segmented-control"
 import { formatNumber } from "@autoresearch/ui/lib/format"
-import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { useState } from "react"
+import { cn } from "@autoresearch/ui/lib/cn"
+import { AnimatePresence, motion, useInView, useReducedMotion } from "motion/react"
+import { useEffect, useRef, useState, type SVGProps } from "react"
 
 import type { Challenge } from "@/data/schema"
 import { formatSeconds } from "@/lib/format"
@@ -126,356 +127,782 @@ function proofTypes(challenge: Challenge): ProofType[] {
 }
 
 /* --------------------------------------------------------------------------------------------
- * Diagrams: small looping SVG stories in the site's quiet palette. Static under reduced motion.
+ * Diagrams: each proof type is a short, stepped story on one shared clock. A step rail below
+ * the scene names the step in play and can be clicked to jump. Under reduced motion every
+ * scene renders in its finished state with no looping.
  * ------------------------------------------------------------------------------------------ */
 
-const CYCLE = 4.8
+const EASE = [0.16, 1, 0.3, 1] as const
+const STEP_MS = 1800
+const HOLD_MS = 2400
+const W = 440
+const H = 220
 
-function useLoop() {
-  const reduce = useReducedMotion() === true
-  return (delay: number, duration = 0.6) =>
-    reduce
-      ? { duration: 0 }
-      : {
-          duration,
-          delay,
-          repeat: Infinity,
-          repeatDelay: CYCLE - duration,
-          ease: [0.16, 1, 0.3, 1] as const,
-        }
+type Status = "idle" | "active" | "done"
+const statusOf = (phase: number, step: number): Status =>
+  phase > step ? "done" : phase === step ? "active" : "idle"
+const OVERLAY: Record<Status, number> = { idle: 0, active: 1, done: 0.5 }
+
+/** Shape of the drawn workload, read from the fixture so the diagrams match the basket. */
+interface SceneSpec {
+  blocks: number
+  foldLeaves: number
+  pipelineLeaves: number
 }
 
-const label = "fill-fg-faint font-mono text-[10px]"
+const powerOfTwo = (value: number) => 2 ** Math.max(1, Math.min(3, Math.round(Math.log2(value))))
 
-function Proof({ x, y, accent = true }: { x: number; y: number; accent?: boolean }) {
+function sceneSpec(challenge: Challenge): SceneSpec {
+  const leaves = (family: string) =>
+    Math.max(
+      2,
+      ...challenge.cases.flatMap((testCase) =>
+        testCase.family === family && testCase.leaves !== undefined ? [testCase.leaves] : [],
+      ),
+    )
+  const blocks = challenge.cases.flatMap((testCase) =>
+    testCase.blocks ? [testCase.blocks[1] - testCase.blocks[0] + 1] : [],
+  )
+  return {
+    blocks: Math.max(1, Math.min(4, ...(blocks.length === 0 ? [3] : [Math.max(...blocks)]))),
+    foldLeaves: powerOfTwo(leaves("recursion")),
+    pipelineLeaves: Math.min(4, leaves("pipeline")),
+  }
+}
+
+function useTimeline(count: number) {
+  const reduce = useReducedMotion() === true
+  const ref = useRef<HTMLDivElement>(null)
+  const inView = useInView(ref, { amount: 0.4 })
+  const [phase, setPhase] = useState(0)
+  useEffect(() => {
+    if (reduce || !inView) return
+    const id = window.setTimeout(
+      () => {
+        setPhase((current) => (current + 1) % (count + 1))
+      },
+      phase >= count ? HOLD_MS : STEP_MS,
+    )
+    return () => {
+      window.clearTimeout(id)
+    }
+  }, [phase, inView, reduce, count])
+  return { ref, phase: reduce ? count : phase, setPhase, reduce }
+}
+
+const caption = (status: Status) =>
+  cn(
+    "font-mono text-[10px] transition-[fill] duration-500",
+    status === "active" ? "fill-fg" : status === "done" ? "fill-fg-muted" : "fill-fg-faint",
+  )
+
+/** A connection that draws in when its step starts and carries a moving dash while active. */
+function Flow({ d, status }: { d: string; status: Status }) {
   return (
-    <g transform={`translate(${String(x)},${String(y)})`}>
-      <rect
-        x={-18}
-        y={-18}
-        width={36}
-        height={36}
-        rx={10}
-        fill={accent ? "var(--ar-accent-soft)" : "var(--ar-surface)"}
-        stroke={accent ? "var(--ar-accent)" : "var(--ar-line-strong)"}
+    <g fill="none" strokeLinecap="round">
+      <path d={d} stroke="var(--ar-line-strong)" strokeWidth={1.25} />
+      <motion.path
+        d={d}
+        stroke="var(--ar-accent)"
         strokeWidth={1.25}
+        initial={false}
+        animate={{ pathLength: status === "idle" ? 0 : 1, opacity: OVERLAY[status] }}
+        transition={{ duration: 0.7, ease: EASE }}
       />
-      <text
-        textAnchor="middle"
-        dy="0.36em"
-        className={
-          accent
-            ? "fill-accent font-display text-[18px] italic"
-            : "fill-fg-muted font-display text-[18px] italic"
-        }
-      >
-        π
-      </text>
+      {status === "active" ? (
+        <motion.path
+          d={d}
+          stroke="var(--ar-accent)"
+          strokeWidth={2.25}
+          strokeDasharray="1.5 9"
+          initial={{ strokeDashoffset: 0 }}
+          animate={{ strokeDashoffset: -21 }}
+          transition={{ duration: 0.7, ease: "linear", repeat: Infinity }}
+        />
+      ) : null}
     </g>
   )
 }
 
-function CairoDiagram() {
-  const loop = useLoop()
-  const rows = 6
-  const cols = 10
+/** A bordered region that lights up while its step runs. */
+function Region({
+  x,
+  y,
+  w,
+  h,
+  r = 10,
+  status,
+}: {
+  x: number
+  y: number
+  w: number
+  h: number
+  r?: number
+  status: Status
+}) {
   return (
-    <svg
-      viewBox="0 0 400 240"
-      className="h-full w-full"
-      role="img"
-      aria-label="Blocks become an execution trace, then a Cairo proof"
-    >
-      {/* Blocks inside the PIE */}
-      <g>
-        {[0, 1, 2].map((index) => (
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={w}
+        height={h}
+        rx={r}
+        fill="var(--ar-bg)"
+        stroke="var(--ar-line-strong)"
+      />
+      <motion.rect
+        x={x}
+        y={y}
+        width={w}
+        height={h}
+        rx={r}
+        fill="var(--ar-accent-soft)"
+        stroke="var(--ar-accent)"
+        strokeWidth={1.25}
+        initial={false}
+        animate={{ opacity: OVERLAY[status] }}
+        transition={{ duration: 0.5, ease: EASE }}
+      />
+    </g>
+  )
+}
+
+/**
+ * A proof. STARK proofs (Cairo AIR) are squares; circuit proofs (wraps, folds) are circles,
+ * so the change of proof system reads at a glance. Pending outputs show as a dashed ghost.
+ */
+function Glyph({
+  x,
+  y,
+  kind,
+  status,
+  size = 17,
+  symbol = kind === "stark" ? "π" : "π′",
+}: {
+  x: number
+  y: number
+  kind: "stark" | "circuit"
+  status: Status
+  size?: number
+  symbol?: string
+}) {
+  const shape = (props: SVGProps<SVGRectElement> & SVGProps<SVGCircleElement>) =>
+    kind === "stark" ? (
+      <rect x={-size} y={-size} width={size * 2} height={size * 2} rx={size * 0.45} {...props} />
+    ) : (
+      <circle r={size} {...props} />
+    )
+  const produced = status !== "idle"
+  return (
+    <g transform={`translate(${String(x)},${String(y)})`}>
+      {shape({ fill: "none", stroke: "var(--ar-line-strong)", strokeDasharray: "3 4" })}
+      {status === "active" ? (
+        <motion.g
+          initial={{ opacity: 0.7, scale: 1 }}
+          animate={{ opacity: 0, scale: 1.7 }}
+          transition={{ duration: 1.3, ease: "easeOut", repeat: Infinity }}
+        >
+          {shape({ fill: "none", stroke: "var(--ar-accent)", strokeWidth: 1 })}
+        </motion.g>
+      ) : null}
+      <motion.g
+        initial={false}
+        animate={{ opacity: produced ? 1 : 0, scale: produced ? 1 : 0.55 }}
+        transition={{ type: "spring", stiffness: 280, damping: 22 }}
+      >
+        {shape({ fill: "var(--ar-bg)", stroke: "var(--ar-accent)", strokeWidth: 1.25 })}
+        {shape({ fill: "var(--ar-accent-soft)" })}
+        <text
+          textAnchor="middle"
+          dy="0.34em"
+          className="fill-accent font-display italic"
+          style={{ fontSize: size * 1.05 }}
+        >
+          {symbol}
+        </text>
+      </motion.g>
+    </g>
+  )
+}
+
+/* Cairo: execute the PIE into an AIR trace, commit to it, run FRI, emit the proof. */
+const CAIRO_STEPS = ["Execute", "Commit", "FRI", "Proof"] as const
+
+function CairoScene({ phase, spec }: { phase: number; spec: SceneSpec }) {
+  const [execute, commit, fri, proof] = [0, 1, 2, 3].map((step) => statusOf(phase, step)) as [
+    Status,
+    Status,
+    Status,
+    Status,
+  ]
+  const cols = 8
+  const rows = 12
+  const chipGap = 6
+  const chipH = (96 - (spec.blocks - 1) * chipGap) / spec.blocks
+  const leaves = [236, 252, 268, 284]
+  const mid = [244, 276]
+  const bars = [72, 40, 22, 12]
+  return (
+    <>
+      {/* PIE with its blocks */}
+      <Region x={14} y={58} w={72} h={108} status={execute} />
+      {Array.from({ length: spec.blocks }, (_, index) => (
+        <g key={index}>
+          <rect
+            x={24}
+            y={64 + index * (chipH + chipGap)}
+            width={52}
+            height={chipH}
+            rx={4}
+            fill="var(--ar-surface)"
+          />
+          <motion.rect
+            x={24}
+            y={64 + index * (chipH + chipGap)}
+            width={52}
+            height={chipH}
+            rx={4}
+            fill="var(--ar-accent)"
+            initial={false}
+            animate={{
+              opacity: execute === "active" ? [0, 0.55, 0.15] : execute === "done" ? 0.15 : 0,
+            }}
+            transition={{ duration: 0.9, delay: index * 0.25, ease: EASE }}
+          />
+          <text
+            x={50}
+            y={64 + index * (chipH + chipGap) + chipH / 2}
+            dy="0.34em"
+            textAnchor="middle"
+            className="fill-fg-muted font-mono text-[9px]"
+          >
+            block {index + 1}
+          </text>
+        </g>
+      ))}
+      <Flow d="M86,112 H108" status={execute} />
+      {/* AIR trace, filled row by row as the OS executes */}
+      {Array.from({ length: rows * cols }, (_, index) => {
+        const row = Math.floor(index / cols)
+        const col = index % cols
+        return (
           <motion.rect
             key={index}
-            x={24}
-            y={70 + index * 34}
-            width={60}
-            height={26}
-            rx={6}
-            fill="var(--ar-surface)"
-            stroke="var(--ar-line-strong)"
-            initial={{ opacity: 0.3 }}
-            animate={{ opacity: [0.3, 1, 1] }}
-            transition={loop(index * 0.15)}
+            x={112 + col * 11.5}
+            y={58 + row * 9}
+            width={9}
+            height={6.5}
+            rx={1.5}
+            fill="var(--ar-accent)"
+            initial={false}
+            animate={{
+              opacity:
+                execute === "idle"
+                  ? 0.07
+                  : execute === "active"
+                    ? 0.75
+                    : commit === "active"
+                      ? 0.5
+                      : 0.3,
+            }}
+            transition={{
+              duration: 0.35,
+              delay: execute === "active" ? (row / rows) * (STEP_MS / 1000) * 0.8 + col * 0.01 : 0,
+            }}
           />
-        ))}
-        <text x={54} y={60} textAnchor="middle" className={label}>
-          PIE · blocks
-        </text>
-      </g>
-      {/* Execution trace filling row by row */}
-      <g transform="translate(118,62)">
-        {Array.from({ length: rows * cols }, (_, index) => {
-          const row = Math.floor(index / cols)
-          const col = index % cols
-          return (
-            <motion.rect
-              key={index}
-              x={col * 13}
-              y={row * 18}
-              width={10}
-              height={14}
-              rx={2}
-              fill="var(--ar-accent)"
-              initial={{ opacity: 0.08 }}
-              animate={{ opacity: [0.08, 0.75, 0.25] }}
-              transition={loop(0.6 + row * 0.18 + col * 0.02, 0.9)}
-            />
-          )
-        })}
-        <text x={64} y={-8} textAnchor="middle" className={label}>
-          execution trace
-        </text>
-      </g>
-      {/* Commitment then proof */}
-      <motion.path
-        d="M258 115 C 285 115, 290 120, 318 120"
-        fill="none"
-        stroke="var(--ar-line-strong)"
-        strokeWidth={1.25}
-        initial={{ pathLength: 0 }}
-        animate={{ pathLength: [0, 1, 1] }}
-        transition={loop(2, 0.8)}
-      />
-      <motion.g
-        initial={{ scale: 0.6, opacity: 0 }}
-        animate={{ scale: [0.6, 1, 1], opacity: [0, 1, 1] }}
-        transition={loop(2.6, 0.6)}
-        style={{ transformOrigin: "345px 120px" }}
-      >
-        <Proof x={345} y={120} />
-      </motion.g>
-      <text x={345} y={160} textAnchor="middle" className={label}>
-        Cairo proof
-      </text>
-    </svg>
-  )
-}
-
-function WrapDiagram() {
-  const loop = useLoop()
-  return (
-    <svg
-      viewBox="0 0 400 240"
-      className="h-full w-full"
-      role="img"
-      aria-label="A Cairo proof is verified inside a circuit, producing a leaf"
-    >
-      <Proof x={70} y={120} accent={false} />
-      <text x={70} y={160} textAnchor="middle" className={label}>
-        Cairo proof
-      </text>
-      <motion.g initial={{ x: 0 }} animate={{ x: [0, 108, 108] }} transition={loop(0.4, 1)}>
-        <circle cx={70} cy={120} r={3} fill="var(--ar-fg-muted)" />
-      </motion.g>
-      {/* Verifier circuit */}
-      <motion.rect
-        x={140}
-        y={68}
-        width={120}
-        height={104}
-        rx={14}
-        fill="none"
-        stroke="var(--ar-line-strong)"
-        strokeDasharray="5 5"
-        initial={{ pathLength: 0 }}
-        animate={{ pathLength: [0, 1, 1] }}
-        transition={loop(0.2, 1.2)}
-      />
-      {[0, 1, 2].map((index) => (
-        <motion.line
-          key={index}
-          x1={156}
-          x2={244}
-          y1={96 + index * 24}
-          y2={96 + index * 24}
-          stroke="var(--ar-accent)"
-          strokeWidth={1.5}
-          strokeLinecap="round"
-          initial={{ pathLength: 0, opacity: 0.2 }}
-          animate={{ pathLength: [0, 1, 1], opacity: [0.2, 0.9, 0.4] }}
-          transition={loop(1.3 + index * 0.25, 0.7)}
-        />
-      ))}
-      <text x={200} y={58} textAnchor="middle" className={label}>
-        verifier circuit
-      </text>
-      <motion.g
-        initial={{ scale: 0.6, opacity: 0 }}
-        animate={{ scale: [0.6, 1, 1], opacity: [0, 1, 1] }}
-        transition={loop(2.6, 0.6)}
-        style={{ transformOrigin: "330px 120px" }}
-      >
-        <Proof x={330} y={120} />
-      </motion.g>
-      <text x={330} y={160} textAnchor="middle" className={label}>
-        circuit leaf
-      </text>
-    </svg>
-  )
-}
-
-function FoldDiagram() {
-  const loop = useLoop()
-  // Eight leaves fold pairwise into one root: levels of 8 → 4 → 2 → 1.
-  const levels = [8, 4, 2, 1]
-  const y = (level: number) => 196 - level * 52
-  const x = (level: number, index: number) => {
-    const count = levels[level] ?? 1
-    return 40 + ((index + 0.5) * 320) / count
-  }
-  return (
-    <svg
-      viewBox="0 0 400 240"
-      className="h-full w-full"
-      role="img"
-      aria-label="Pairs of proofs fold into parents until one root remains"
-    >
-      {levels.slice(1).map((count, levelIndex) => {
-        const level = levelIndex + 1
-        return Array.from({ length: count }, (_, index) => (
-          <g key={`${String(level)}-${String(index)}`}>
-            {[0, 1].map((child) => (
-              <motion.line
-                key={child}
-                x1={x(level - 1, index * 2 + child)}
-                y1={y(level - 1) - 8}
-                x2={x(level, index)}
-                y2={y(level) + 8}
-                stroke="var(--ar-line-strong)"
-                initial={{ pathLength: 0 }}
-                animate={{ pathLength: [0, 1, 1] }}
-                transition={loop(level * 0.7, 0.5)}
-              />
-            ))}
-          </g>
-        ))
+        )
       })}
-      {levels.map((count, level) =>
-        Array.from({ length: count }, (_, index) => (
-          <motion.circle
-            key={`${String(level)}-${String(index)}`}
-            cx={x(level, index)}
-            cy={y(level)}
-            r={level === levels.length - 1 ? 11 : 7}
-            fill={level === levels.length - 1 ? "var(--ar-accent)" : "var(--ar-surface)"}
-            stroke={level === 0 ? "var(--ar-line-strong)" : "var(--ar-accent)"}
-            strokeWidth={1.25}
-            initial={{ opacity: level === 0 ? 1 : 0, scale: level === 0 ? 1 : 0.4 }}
-            animate={level === 0 ? { opacity: 1 } : { opacity: [0, 1, 1], scale: [0.4, 1, 1] }}
-            transition={level === 0 ? { duration: 0 } : loop(level * 0.7 + 0.4, 0.5)}
-            style={{ transformOrigin: `${String(x(level, index))}px ${String(y(level))}px` }}
+      <Flow d="M206,112 H226" status={commit} />
+      {/* Merkle commitment over the trace columns */}
+      {mid.flatMap((parent, index) =>
+        [leaves[index * 2] ?? 0, leaves[index * 2 + 1] ?? 0].map((leaf) => (
+          <Flow
+            key={`${String(parent)}-${String(leaf)}`}
+            d={`M${String(leaf)},146 L${String(parent)},116`}
+            status={commit}
           />
         )),
       )}
-      <text x={20} y={y(0) + 4} className={label}>
-        leaves
-      </text>
-      <text x={x(3, 0) + 18} y={y(3) + 4} className={label}>
-        root
-      </text>
-    </svg>
-  )
-}
-
-function PipelineDiagram() {
-  const loop = useLoop()
-  const rows = [80, 160]
-  const stepsX = [40, 130, 220]
-  return (
-    <svg
-      viewBox="0 0 400 240"
-      className="h-full w-full"
-      role="img"
-      aria-label="Two PIEs are proved, wrapped and folded into one root"
-    >
-      {rows.map((rowY, row) => (
-        <g key={rowY}>
-          <motion.rect
-            x={stepsX[0] ?? 0}
-            y={rowY - 13}
-            width={44}
-            height={26}
-            rx={6}
-            fill="var(--ar-surface)"
-            stroke="var(--ar-line-strong)"
-            initial={{ opacity: 0.4 }}
-            animate={{ opacity: [0.4, 1, 1] }}
-            transition={loop(row * 0.2)}
-          />
-          <text x={(stepsX[0] ?? 0) + 22} y={rowY + 4} textAnchor="middle" className={label}>
-            PIE
-          </text>
-          {[1, 2].map((step) => (
-            <g key={step}>
-              <motion.line
-                x1={(stepsX[step - 1] ?? 0) + (step === 1 ? 48 : 22)}
-                x2={(stepsX[step] ?? 0) - 22}
-                y1={rowY}
-                y2={rowY}
-                stroke="var(--ar-line-strong)"
-                initial={{ pathLength: 0 }}
-                animate={{ pathLength: [0, 1, 1] }}
-                transition={loop(0.4 + step * 0.7 + row * 0.15, 0.5)}
-              />
-              <motion.g
-                initial={{ opacity: 0, scale: 0.6 }}
-                animate={{ opacity: [0, 1, 1], scale: [0.6, 1, 1] }}
-                transition={loop(0.8 + step * 0.7 + row * 0.15, 0.5)}
-                style={{ transformOrigin: `${String(stepsX[step] ?? 0)}px ${String(rowY)}px` }}
-              >
-                <Proof x={stepsX[step] ?? 0} y={rowY} accent={step === 2} />
-              </motion.g>
-            </g>
-          ))}
-        </g>
+      {mid.map((parent) => (
+        <Flow key={parent} d={`M${String(parent)},108 L260,82`} status={commit} />
       ))}
-      <text x={stepsX[1]} y={44} textAnchor="middle" className={label}>
-        Cairo
-      </text>
-      <text x={stepsX[2]} y={44} textAnchor="middle" className={label}>
-        wrap
-      </text>
-      {rows.map((rowY) => (
-        <motion.line
-          key={rowY}
-          x1={(stepsX[2] ?? 0) + 22}
-          y1={rowY}
-          x2={318}
-          y2={120}
-          stroke="var(--ar-accent)"
-          strokeWidth={1.25}
-          initial={{ pathLength: 0 }}
-          animate={{ pathLength: [0, 1, 1] }}
-          transition={loop(2.5, 0.5)}
+      {leaves.map((leaf) => (
+        <rect
+          key={leaf}
+          x={leaf - 4}
+          y={146}
+          width={8}
+          height={8}
+          rx={2}
+          fill="var(--ar-fg-faint)"
         />
       ))}
+      {mid.map((parent) => (
+        <circle key={parent} cx={parent} cy={112} r={4} fill="var(--ar-fg-faint)" />
+      ))}
       <motion.circle
-        cx={340}
-        cy={120}
-        r={14}
+        cx={260}
+        cy={78}
+        r={6}
         fill="var(--ar-accent)"
-        initial={{ opacity: 0, scale: 0.4 }}
-        animate={{ opacity: [0, 1, 1], scale: [0.4, 1, 1] }}
-        transition={loop(3, 0.5)}
-        style={{ transformOrigin: "340px 120px" }}
+        initial={false}
+        animate={{
+          opacity: commit === "idle" ? 0.15 : 1,
+          scale: commit === "active" ? [1, 1.35, 1] : 1,
+        }}
+        transition={{ duration: 0.8, delay: commit === "active" ? 0.6 : 0, ease: EASE }}
       />
-      <text x={340} y={156} textAnchor="middle" className={label}>
-        fold → root
-      </text>
-    </svg>
+      <Flow d="M296,112 H306" status={fri} />
+      {/* FRI: each round halves the polynomial's degree */}
+      {bars.map((height, index) => (
+        <g key={height}>
+          <rect
+            x={312 + index * 13}
+            y={154 - 72}
+            width={8}
+            height={72}
+            rx={2}
+            fill="var(--ar-surface)"
+          />
+          <motion.rect
+            x={312 + index * 13}
+            y={154 - height}
+            width={8}
+            height={height}
+            rx={2}
+            fill="var(--ar-accent)"
+            initial={false}
+            animate={{
+              opacity: fri === "idle" ? 0 : fri === "active" ? 0.85 : 0.45,
+              scaleY: fri === "idle" ? 0 : 1,
+            }}
+            transition={{ duration: 0.45, delay: fri === "active" ? index * 0.32 : 0, ease: EASE }}
+            style={{ originY: 1 }}
+          />
+        </g>
+      ))}
+      <Flow d="M366,112 H386" status={proof} />
+      <Glyph x={410} y={112} kind="stark" status={proof} size={17} />
+      {/* Column captions */}
+      {(
+        [
+          [50, "PIE", execute],
+          [157, "AIR trace", execute],
+          [260, "commit", commit],
+          [331, "FRI", fri],
+          [410, "proof", proof],
+        ] as const
+      ).map(([x, text, status]) => (
+        <text key={text} x={x} y={40} textAnchor="middle" className={caption(status)}>
+          {text}
+        </text>
+      ))}
+      {(
+        [
+          [50, `${String(spec.blocks)} block${spec.blocks === 1 ? "" : "s"}`],
+          [157, "rows × columns"],
+          [260, "Merkle root"],
+          [331, "degree ÷ 2"],
+          [410, "Cairo proof"],
+        ] as const
+      ).map(([x, text]) => (
+        <text
+          key={text}
+          x={x}
+          y={190}
+          textAnchor="middle"
+          className="fill-fg-faint font-mono text-[9px]"
+        >
+          {text}
+        </text>
+      ))}
+    </>
   )
 }
 
-const DIAGRAMS: Record<ProofTypeId, () => React.JSX.Element> = {
-  cairo: CairoDiagram,
-  wrap: WrapDiagram,
-  fold: FoldDiagram,
-  pipeline: PipelineDiagram,
+/* Wrap: verify a Cairo proof inside a circuit, prove that circuit, emit a leaf. */
+const WRAP_STEPS = ["Input", "Verify", "Prove", "Leaf"] as const
+const CHECKS = ["Merkle paths", "FRI queries", "AIR constraints"] as const
+
+function WrapScene({ phase }: { phase: number }) {
+  const [input, verify, prove, leaf] = [0, 1, 2, 3].map((step) => statusOf(phase, step)) as [
+    Status,
+    Status,
+    Status,
+    Status,
+  ]
+  return (
+    <>
+      <Glyph x={50} y={112} kind="stark" status={input === "active" ? "active" : "done"} />
+      <Flow d="M72,112 H118" status={input} />
+      <Region x={122} y={50} w={196} h={124} r={14} status={prove} />
+      <clipPath id="wrap-circuit">
+        <rect x={122} y={50} width={196} height={124} rx={14} />
+      </clipPath>
+      {prove === "active" ? (
+        <motion.rect
+          y={50}
+          width={40}
+          height={124}
+          fill="url(#wrap-sweep)"
+          clipPath="url(#wrap-circuit)"
+          initial={{ x: 82 }}
+          animate={{ x: 318 }}
+          transition={{ duration: 0.9, ease: "easeInOut", repeat: Infinity, repeatDelay: 0.1 }}
+        />
+      ) : null}
+      <defs>
+        <linearGradient id="wrap-sweep" x1="0" x2="1">
+          <stop offset="0" stopColor="var(--ar-accent)" stopOpacity="0" />
+          <stop offset="0.5" stopColor="var(--ar-accent)" stopOpacity="0.28" />
+          <stop offset="1" stopColor="var(--ar-accent)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {CHECKS.map((check, index) => {
+        const y = 88 + index * 28
+        return (
+          <g key={check}>
+            <text
+              x={136}
+              y={y}
+              dy="0.34em"
+              className={caption(verify === "idle" ? "idle" : "done")}
+            >
+              {check}
+            </text>
+            <line
+              x1={238}
+              x2={286}
+              y1={y}
+              y2={y}
+              stroke="var(--ar-line-strong)"
+              strokeWidth={2}
+              strokeLinecap="round"
+            />
+            <motion.line
+              x1={238}
+              x2={286}
+              y1={y}
+              y2={y}
+              stroke="var(--ar-accent)"
+              strokeWidth={2}
+              strokeLinecap="round"
+              initial={false}
+              animate={{ pathLength: verify === "idle" ? 0 : 1 }}
+              transition={{
+                duration: 0.45,
+                delay: verify === "active" ? index * 0.45 : 0,
+                ease: EASE,
+              }}
+            />
+            <motion.path
+              d={`M295,${String(y)} l3.5,3.5 l6,-7`}
+              fill="none"
+              stroke="var(--ar-accent)"
+              strokeWidth={1.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              initial={false}
+              animate={{
+                pathLength: verify === "idle" ? 0 : 1,
+                opacity: verify === "idle" ? 0 : 1,
+              }}
+              transition={{ duration: 0.3, delay: verify === "active" ? index * 0.45 + 0.4 : 0 }}
+            />
+          </g>
+        )
+      })}
+      <Flow d="M318,112 H366" status={leaf} />
+      <Glyph x={390} y={112} kind="circuit" status={leaf} />
+      {(
+        [
+          [50, "Cairo proof", input],
+          [220, "verifier circuit", prove === "idle" ? verify : prove],
+          [390, "circuit leaf", leaf],
+        ] as const
+      ).map(([x, text, status]) => (
+        <text key={text} x={x} y={36} textAnchor="middle" className={caption(status)}>
+          {text}
+        </text>
+      ))}
+      {(
+        [
+          [50, "STARK · Cairo AIR"],
+          [220, "proved as a circuit"],
+          [390, "one per Cairo proof"],
+        ] as const
+      ).map(([x, text]) => (
+        <text
+          key={text}
+          x={x}
+          y={196}
+          textAnchor="middle"
+          className="fill-fg-faint font-mono text-[9px]"
+        >
+          {text}
+        </text>
+      ))}
+    </>
+  )
+}
+
+/* Fold: each fold verifies two child proofs and proves one parent, level by level. */
+const foldLevels = (leaves: number) => {
+  const levels = [leaves]
+  while ((levels.at(-1) ?? 1) > 1) levels.push(Math.ceil((levels.at(-1) ?? 1) / 2))
+  return levels
+}
+const foldSteps = (spec: SceneSpec) =>
+  foldLevels(spec.foldLeaves).map((count, level) =>
+    level === 0 ? "Leaves" : count === 1 ? "Root" : `Fold ${String(level)}`,
+  )
+
+function FoldScene({ phase, spec }: { phase: number; spec: SceneSpec }) {
+  const levels = foldLevels(spec.foldLeaves)
+  const top = 44
+  const bottom = 178
+  const y = (level: number) =>
+    levels.length === 1 ? bottom : bottom - (level * (bottom - top)) / (levels.length - 1)
+  const x = (level: number, index: number) => {
+    const count = levels[level] ?? 1
+    return 96 + ((index + 0.5) * 320) / count
+  }
+  const radius = (level: number) => (level === levels.length - 1 ? 16 : 12)
+  return (
+    <>
+      {levels.slice(1).map((count, offset) => {
+        const level = offset + 1
+        return Array.from({ length: count }, (_, index) =>
+          [index * 2, index * 2 + 1]
+            .filter((child) => child < (levels[level - 1] ?? 0))
+            .map((child) => (
+              <Flow
+                key={`${String(level)}-${String(index)}-${String(child)}`}
+                d={`M${String(x(level - 1, child))},${String(y(level - 1) - radius(level - 1))} L${String(x(level, index))},${String(y(level) + radius(level))}`}
+                status={statusOf(phase, level)}
+              />
+            )),
+        )
+      })}
+      {levels.map((count, level) =>
+        Array.from({ length: count }, (_, index) => (
+          <Glyph
+            key={`${String(level)}-${String(index)}`}
+            x={x(level, index)}
+            y={y(level)}
+            kind="circuit"
+            size={radius(level)}
+            status={level === 0 ? (phase === 0 ? "active" : "done") : statusOf(phase, level)}
+          />
+        )),
+      )}
+      {levels.map((count, level) => (
+        <text
+          key={count}
+          x={14}
+          y={y(level)}
+          dy="0.34em"
+          className={caption(
+            level === 0 ? (phase === 0 ? "active" : "done") : statusOf(phase, level),
+          )}
+        >
+          {level === 0
+            ? `${String(count)} leaves`
+            : count === 1
+              ? "root"
+              : `${String(count)} folds`}
+        </text>
+      ))}
+      <text
+        x={W - 14}
+        y={bottom + 28}
+        textAnchor="end"
+        className="fill-fg-faint font-mono text-[9px]"
+      >
+        each fold: verify 2 → prove 1
+      </text>
+    </>
+  )
+}
+
+/* Pipeline: every stage chained, PIEs to Cairo proofs to leaves to one root. */
+const PIPELINE_STEPS = ["Cairo", "Wrap", "Fold"] as const
+
+function PipelineScene({ phase, spec }: { phase: number; spec: SceneSpec }) {
+  const lanes = spec.pipelineLeaves
+  const [cairo, wrap, fold] = [0, 1, 2].map((step) => statusOf(phase, step)) as [
+    Status,
+    Status,
+    Status,
+  ]
+  const spread = Math.min(72, 124 / Math.max(1, lanes - 1))
+  const laneY = (lane: number) => 112 + (lane - (lanes - 1) / 2) * spread
+  const total = 3 * lanes - 1
+  const made = (phase > 0 ? lanes : 0) + (phase > 1 ? lanes : 0) + (phase > 2 ? lanes - 1 : 0)
+  const glyph = lanes > 2 ? 12 : 15
+  return (
+    <>
+      {Array.from({ length: lanes }, (_, lane) => {
+        const ly = laneY(lane)
+        return (
+          <g key={lane}>
+            <rect x={18} y={ly - 12} width={52} height={24} rx={6} fill="var(--ar-surface)" />
+            <text
+              x={44}
+              y={ly}
+              dy="0.34em"
+              textAnchor="middle"
+              className="fill-fg-muted font-mono text-[9px]"
+            >
+              PIE {lane + 1}
+            </text>
+            <Flow d={`M70,${String(ly)} H${String(146 - glyph)}`} status={cairo} />
+            <Glyph x={150} y={ly} kind="stark" size={glyph} status={cairo} />
+            <Flow
+              d={`M${String(150 + glyph + 4)},${String(ly)} H${String(256 - glyph)}`}
+              status={wrap}
+            />
+            <Glyph x={260} y={ly} kind="circuit" size={glyph} status={wrap} />
+            <Flow
+              d={`M${String(260 + glyph + 4)},${String(ly)} C ${String(320)},${String(ly)} ${String(320)},112 ${String(366)},112`}
+              status={fold}
+            />
+          </g>
+        )
+      })}
+      <Glyph x={386} y={112} kind="circuit" size={19} status={fold} />
+      {(
+        [
+          [44, "PIE", cairo],
+          [150, "Cairo", cairo],
+          [260, "wrap", wrap],
+          [386, "fold → root", fold],
+        ] as const
+      ).map(([x, text, status]) => (
+        <text key={text} x={x} y={30} textAnchor="middle" className={caption(status)}>
+          {text}
+        </text>
+      ))}
+      <text x={W - 14} y={204} textAnchor="end" className="fill-fg-faint font-mono text-[9px]">
+        proofs{" "}
+        <tspan className="fill-fg">
+          {made} / {total}
+        </tspan>
+      </text>
+    </>
+  )
+}
+
+const SCENES: Record<
+  ProofTypeId,
+  {
+    steps: (spec: SceneSpec) => readonly string[]
+    label: string
+    Scene: (props: { phase: number; spec: SceneSpec }) => React.JSX.Element
+  }
+> = {
+  cairo: {
+    steps: () => CAIRO_STEPS,
+    label:
+      "A PIE's blocks execute into an AIR trace, which is committed, tested with FRI and proved",
+    Scene: CairoScene,
+  },
+  wrap: {
+    steps: () => WRAP_STEPS,
+    label: "A Cairo proof is verified inside a circuit, and that circuit is proved as a leaf",
+    Scene: WrapScene,
+  },
+  fold: {
+    steps: foldSteps,
+    label: "Pairs of circuit proofs fold into parents until one root remains",
+    Scene: FoldScene,
+  },
+  pipeline: {
+    steps: () => PIPELINE_STEPS,
+    label: "PIEs are proved, wrapped and folded into one root",
+    Scene: PipelineScene,
+  },
+}
+
+function StepRail({
+  steps,
+  phase,
+  onSelect,
+}: {
+  steps: readonly string[]
+  phase: number
+  onSelect: (step: number) => void
+}) {
+  return (
+    <ol
+      className="grid gap-3"
+      style={{ gridTemplateColumns: `repeat(${String(steps.length)}, minmax(0, 1fr))` }}
+    >
+      {steps.map((step, index) => {
+        const status = statusOf(phase, index)
+        return (
+          <li key={step}>
+            <button
+              type="button"
+              aria-current={status === "active" ? "step" : undefined}
+              onClick={() => {
+                onSelect(index)
+              }}
+              className="flex w-full cursor-pointer flex-col gap-2 text-left"
+            >
+              <span className="relative h-0.5 w-full overflow-hidden rounded-full bg-line-strong">
+                <motion.span
+                  key={status === "active" ? `active-${String(phase)}` : status}
+                  className="absolute inset-y-0 left-0 rounded-full bg-accent"
+                  initial={{ width: status === "done" ? "100%" : "0%" }}
+                  animate={{ width: status === "idle" ? "0%" : "100%" }}
+                  transition={{
+                    duration: status === "active" ? STEP_MS / 1000 : 0.3,
+                    ease: "linear",
+                  }}
+                />
+              </span>
+              <span className="flex items-baseline gap-2 font-mono text-[10px]">
+                <span className="text-fg-faint tabular">{String(index + 1).padStart(2, "0")}</span>
+                <span
+                  className={cn(
+                    "truncate transition-colors duration-500",
+                    status === "idle" ? "text-fg-faint" : "text-fg",
+                  )}
+                >
+                  {step}
+                </span>
+              </span>
+            </button>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+/** One scene on its own clock; remounted per proof type so every story starts from step one. */
+function Stage({ id, spec }: { id: ProofTypeId; spec: SceneSpec }) {
+  const scene = SCENES[id]
+  const steps = scene.steps(spec)
+  const { ref, phase, setPhase } = useTimeline(steps.length)
+  const { Scene } = scene
+  return (
+    <div ref={ref} className="flex h-full flex-col gap-6">
+      <div className="flex flex-1 items-center">
+        <svg
+          viewBox={`0 0 ${String(W)} ${String(H)}`}
+          className="w-full"
+          role="img"
+          aria-label={scene.label}
+        >
+          <Scene phase={phase} spec={spec} />
+        </svg>
+      </div>
+      <StepRail steps={steps} phase={phase} onSelect={setPhase} />
+    </div>
+  )
 }
 
 /**
@@ -487,7 +914,7 @@ export function ProofTypes({ challenge }: { challenge: Challenge }) {
   const [active, setActive] = useState<ProofTypeId>(types[0]?.id ?? "cairo")
   const current = types.find((type) => type.id === active) ?? types[0]
   if (current === undefined) return null
-  const Diagram = DIAGRAMS[current.id]
+  const spec = sceneSpec(challenge)
 
   return (
     <div className="space-y-5">
@@ -499,7 +926,7 @@ export function ProofTypes({ challenge }: { challenge: Challenge }) {
         options={types.map((type) => ({ value: type.id, label: type.name }))}
       />
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="relative flex min-h-[22rem] items-center justify-center overflow-hidden rounded-2xl border border-line bg-bg-raised p-6">
+        <div className="relative flex min-h-[22rem] overflow-hidden rounded-2xl border border-line bg-bg-raised bg-[radial-gradient(var(--ar-line-strong)_1px,transparent_1px)] [background-size:18px_18px] p-6">
           <AnimatePresence mode="wait">
             <motion.div
               key={current.id}
@@ -509,7 +936,7 @@ export function ProofTypes({ challenge }: { challenge: Challenge }) {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
             >
-              <Diagram />
+              <Stage id={current.id} spec={spec} />
             </motion.div>
           </AnimatePresence>
         </div>

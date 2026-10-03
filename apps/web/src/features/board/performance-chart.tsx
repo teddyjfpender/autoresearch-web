@@ -226,10 +226,16 @@ export function PerformanceChart({
         item.high ?? item.speedup,
       ]),
     ]
-    const lo = Math.min(1, ...values)
-    const hi = Math.max(1, ...values)
+    // With history shown, the first milestone is the origin: 1.00× is where proving started, and
+    // every later point (baseline included) reads as speedup since then.
+    const base = shownHistory[0]?.speedup ?? 1
+    const normalized = [1 / base, ...values.map((value) => value / base)]
+    const lo = Math.min(1, ...normalized)
+    const hi = Math.max(1, ...normalized)
     const pad = Math.max(0.02, (hi - lo) * 0.12)
-    const y = createScale("lin", [Math.max(0, lo - pad), hi + pad], [innerHeight, 0])
+    const floor = shownHistory.length > 0 ? 1 : Math.max(0, lo - pad)
+    const scale = createScale("lin", [floor, hi + pad], [innerHeight, 0])
+    const y = (value: number) => scale(value / base)
 
     const best = runningBest(ordered, trackId, bucket)
     let path = `M${String(startX)},${String(y(1))}`
@@ -251,8 +257,9 @@ export function PerformanceChart({
       labeled: index % labelEvery === 0 && index * historyStep <= lastLabelX,
       px: shownHistory.length === 1 ? historyWidth / 2 : index * historyStep,
       py: y(milestone.speedup),
-      lowY: milestone.low === null ? null : y(milestone.low),
-      highY: milestone.high === null ? null : y(milestone.high),
+      // Estimate whiskers below the origin are clipped to the axis.
+      lowY: milestone.low === null ? null : Math.min(innerHeight, y(milestone.low)),
+      highY: milestone.high === null ? null : Math.min(innerHeight, y(milestone.high)),
     }))
     const historyPath = historyPoints
       .map((point, index) => `${index === 0 ? "M" : "L"}${String(point.px)},${String(point.py)}`)
@@ -293,8 +300,12 @@ export function PerformanceChart({
       area: `${path}V${String(innerHeight)}H${String(startX)}Z`,
       baseline: { x: startX, y: y(1) },
       xTicks,
-      yTicks: y.ticks(5),
-      y,
+      // Label the origin itself when the axis starts at the first milestone.
+      yTicks:
+        shownHistory.length > 0
+          ? [floor, ...scale.ticks(5).filter((tick) => tick > floor + (hi + pad - floor) * 0.08)]
+          : scale.ticks(5),
+      y: scale,
       timed,
     }
   }, [candidates, mode, bucket, innerWidth, innerHeight, baselineDate, history, track])
@@ -327,7 +338,9 @@ export function PerformanceChart({
   const yTitle =
     mode === "pareto"
       ? `${METRICS.rTime.axis} (${METRICS.rTime.direction})`
-      : `${track?.name ?? ""} speedup · ${track?.formula ?? ""}`
+      : model.history[0] === undefined
+        ? `${track?.name ?? ""} speedup · ${track?.formula ?? ""}`
+        : `${track?.name ?? ""} speedup since ${model.history[0].milestone.label}`
   const empty = candidates.every((candidate) => candidate.buckets[bucket] === null)
 
   return (
@@ -645,7 +658,7 @@ export function PerformanceChart({
                     <dd>{formatNumber(hoveredRatios.rTime, 3)}</dd>
                   </div>
                   <div>
-                    <dt className="text-fg-faint">speedup</dt>
+                    <dt className="text-fg-faint">vs. baseline</dt>
                     <dd>{hoveredScore === null ? "—" : `${formatNumber(hoveredScore, 3)}×`}</dd>
                   </div>
                 </dl>

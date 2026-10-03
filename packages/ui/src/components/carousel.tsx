@@ -56,9 +56,27 @@ export function Carousel({
   useEffect(() => {
     const node = trackRef.current
     if (!node) return
+    // A horizontal trackpad swipe also carries small vertical deltas; left alone, the page (or a
+    // smooth-scroll library listening on window) would drift up and down while browsing. Claim
+    // horizontal-dominant wheel gestures for the track, pausing snap until the gesture settles.
+    let settle: number | undefined
+    const onWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return
+      event.preventDefault()
+      event.stopPropagation()
+      node.style.scrollSnapType = "none"
+      node.scrollLeft += event.deltaX
+      window.clearTimeout(settle)
+      settle = window.setTimeout(() => {
+        node.style.scrollSnapType = ""
+      }, 140)
+    }
     node.addEventListener("scroll", measure, { passive: true })
+    node.addEventListener("wheel", onWheel, { passive: false })
     return () => {
+      window.clearTimeout(settle)
       node.removeEventListener("scroll", measure)
+      node.removeEventListener("wheel", onWheel)
     }
   }, [measure])
 
@@ -80,7 +98,7 @@ export function Carousel({
     >
       <div
         ref={trackRef}
-        className="-mx-4 flex snap-x snap-mandatory scroll-px-4 [scrollbar-width:none] gap-4 overflow-x-auto px-4 pb-2 sm:-mx-0 sm:scroll-px-0 sm:px-0 [&::-webkit-scrollbar]:hidden"
+        className="-mx-4 flex touch-pan-x snap-x snap-mandatory scroll-px-4 [scrollbar-width:none] gap-4 overflow-x-auto overscroll-x-contain px-4 pb-2 sm:-mx-0 sm:scroll-px-0 sm:px-0 [&::-webkit-scrollbar]:hidden"
       >
         {slides.map((slide, index) => (
           <div

@@ -8,7 +8,7 @@ import { ChevronRight } from "lucide-react"
 
 import type { Challenge } from "@/data/schema"
 import { formatSeconds } from "@/lib/format"
-import { scoreFor, type Candidate, type FirstProof } from "@/lib/candidates"
+import { scoreFor, type CairoProgress, type Candidate, type FirstProof } from "@/lib/candidates"
 import { routes } from "@/lib/routes"
 import type { Summary } from "@/lib/scoring"
 
@@ -25,11 +25,13 @@ export function ChallengeHero({
   summary,
   candidates,
   firstProof,
+  progress,
 }: {
   challenge: Challenge
   summary: Summary
   candidates: readonly Candidate[]
   firstProof: FirstProof | null
+  progress: CairoProgress | null
 }) {
   const gatesDone = challenge.gates.filter((gate) => gate.status === "done").length
   const seconds = (values: readonly number[]) =>
@@ -92,13 +94,19 @@ export function ChallengeHero({
                   ? "no complete proof basket yet"
                   : `PR #${String(basketLeader.prNumber)} · all jobs`,
             },
-            {
-              label: "Best Cairo proof speedup",
-              value: speedup(cairoLeader, "pie"),
-              ...(cairoLeader
-                ? { hint: `PR #${String(cairoLeader.prNumber)} · Cairo proofs` }
-                : {}),
-            },
+            progress
+              ? {
+                  label: "Total Cairo improvement",
+                  value: `${formatNumber(progress.speedup, 1)}×`,
+                  hint: `${String(Math.round(progress.reduction * 100))}% less proof time since ${progress.since}`,
+                }
+              : {
+                  label: "Best Cairo proof speedup",
+                  value: speedup(cairoLeader, "pie"),
+                  ...(cairoLeader
+                    ? { hint: `PR #${String(cairoLeader.prNumber)} · Cairo proofs` }
+                    : {}),
+                },
             cairoAgainstBaseline.length > 0
               ? {
                   label: "Cairo proof time",

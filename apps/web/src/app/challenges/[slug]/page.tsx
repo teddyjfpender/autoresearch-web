@@ -16,7 +16,12 @@ import { DiscussionPanel } from "@/features/board/discussion-panel"
 import { ChallengeHero } from "@/features/challenge/challenge-hero"
 import { ProgressChart } from "@/features/chart/progress-chart"
 import { ProofTypes } from "@/features/board/proof-types"
-import { buildCandidates, firstProofTimes, historyMilestones } from "@/lib/candidates"
+import {
+  buildCandidates,
+  cairoProgress,
+  firstProofTimes,
+  historyMilestones,
+} from "@/lib/candidates"
 import { getCommitDates, getResearchActivity } from "@/lib/github-research"
 import { summarize } from "@/lib/scoring"
 
@@ -55,6 +60,7 @@ export default async function ChallengePage({ params }: Props) {
     reviews.map((review) => review.headSha),
   )
   const candidates = buildCandidates(challenge, reviews, measurements, activity.pulls, commitDates)
+  const history = historyMilestones(proofProgress)
 
   return (
     <>
@@ -63,6 +69,7 @@ export default async function ChallengePage({ params }: Props) {
         summary={summary}
         candidates={candidates}
         firstProof={firstProofTimes(proofProgress)}
+        progress={cairoProgress(candidates, history)}
       />
       <Container className="pb-24">
         <ChallengeBoard
@@ -70,7 +77,7 @@ export default async function ChallengePage({ params }: Props) {
           families={challenge.families}
           tracks={challenge.tracks}
           baselineDate={challenge.contract.baselineMeasuredAt}
-          history={historyMilestones(proofProgress)}
+          history={history}
           proofs={<ProofTypes challenge={challenge} />}
           rankedChart={
             summary.ranked > 0 ? (
