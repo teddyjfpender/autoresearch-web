@@ -7,7 +7,16 @@ import { AnimatePresence, motion } from "motion/react"
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react"
 
 import type { Track, TrackId } from "@/data/schema"
-import { paretoIds, runningBest, scoreFor, type BucketId, type Candidate } from "@/lib/candidates"
+import { formatDate, formatDateTime } from "@/lib/dates"
+import {
+  allDated,
+  chronological,
+  paretoIds,
+  runningBest,
+  scoreFor,
+  type BucketId,
+  type Candidate,
+} from "@/lib/candidates"
 import { METRICS } from "@/lib/metrics"
 
 import { createScale, extent } from "../chart/scales"
@@ -24,6 +33,16 @@ function ratioDomain(values: readonly number[]): [number, number] {
   const mid = (lo + hi) / 2
   return [mid - half, mid + half]
 }
+
+const dateTimeShort = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+  timeZone: "UTC",
+})
+const formatDateTimeShort = (value: number) => dateTimeShort.format(new Date(value))
 
 /** Enough decimals to tell neighbouring ticks apart. */
 const tickDigits = (ticks: readonly number[]) => {
@@ -70,6 +89,7 @@ export function PerformanceChart({
   selected,
   onSelect,
   timeScope,
+  baselineDate,
 }: {
   candidates: readonly Candidate[]
   tracks: readonly Track[]
@@ -81,6 +101,8 @@ export function PerformanceChart({
   selected: number | null
   onSelect: (prNumber: number) => void
   timeScope: string
+  /** When the pinned baseline was measured (ISO date); anchors the time axis. */
+  baselineDate: string
 }) {
   const [hover, setHover] = useState<number | null>(null)
   const [containerRef, width] = useWidth<HTMLDivElement>()
@@ -128,13 +150,24 @@ export function PerformanceChart({
         yTicks: y.ticks(5),
         x,
         y,
+        timed: false,
+        formatX: (value: number) => formatNumber(value, tickDigits(x.ticks(5))),
       }
     }
 
-    const slots = candidates.length + 1
-    const step = slots > 1 ? innerWidth / (slots - 1) : 0
-    const xAt = (slot: number) => slot * step
-    const values = candidates.flatMap((candidate) => {
+    // Time axis when every candidate is dated (head commit or PR open time), else PR order.
+    const ordered = chronological(candidates)
+    const timed = allDated(ordered)
+    const times = ordered.map((candidate) => Date.parse(candidate.measuredAt ?? ""))
+    const start = Math.min(Date.parse(baselineDate), ...(timed ? times : []))
+    const end = timed ? Math.max(...times, start + 3_600_000) : 0
+    const span = end - start
+    const timeScale = createScale("lin", [start - span * 0.04, end + span * 0.04], [0, innerWidth])
+    const step = ordered.length > 0 ? innerWidth / ordered.length : 0
+    const xFor = (index: number) => (timed ? timeScale(times[index] ?? start) : (index + 1) * step)
+    const originX = timed ? timeScale(start) : 0
+
+    const values = ordered.flatMap((candidate) => {
       const value = scoreFor(candidate, mode, bucket)
       return value === null ? [] : [value]
     })
@@ -142,31 +175,42 @@ export function PerformanceChart({
     const hi = Math.max(1, ...values)
     const pad = Math.max(0.02, (hi - lo) * 0.15)
     const y = createScale("lin", [lo - pad, hi + pad], [innerHeight, 0])
-    const best = runningBest(candidates, mode, bucket)
-    let path = `M${String(xAt(0))},${String(y(1))}`
+    const best = runningBest(ordered, mode, bucket)
+    let path = `M${String(originX)},${String(y(1))}`
     for (const [index, value] of best.entries()) {
-      path += `H${String(xAt(index + 1))}V${String(y(value))}`
+      path += `H${String(xFor(index))}V${String(y(value))}`
     }
-    const points: Point[] = candidates.map((candidate, index) => {
+    path += `H${String(innerWidth)}`
+    const points: Point[] = ordered.map((candidate, index) => {
       const value = scoreFor(candidate, mode, bucket)
       return {
         candidate,
-        px: xAt(index + 1),
+        px: xFor(index),
         py: value === null ? null : y(value),
         highlight: value !== null && value === best[index] && value > 1,
       }
     })
+    const tickCount = 5
+    const xTicks = timed
+      ? Array.from({ length: tickCount }, (_, index) => start + (span * index) / (tickCount - 1))
+      : []
     return {
       points,
       path,
-      area: `${path}V${String(innerHeight)}H${String(xAt(0))}Z`,
-      baseline: { x: xAt(0), y: y(1) },
-      xTicks: [] as number[],
+      area: `${path}V${String(innerHeight)}H${String(originX)}Z`,
+      baseline: { x: originX, y: y(1) },
+      xTicks,
       yTicks: y.ticks(5),
-      x: xAt,
+      x: timed ? timeScale : xFor,
       y,
+      timed,
+      // Short spans need the time of day; longer ones read better as dates.
+      formatX: (value: number) =>
+        span <= 3 * 86_400_000
+          ? formatDateTimeShort(value)
+          : formatDate(new Date(value).toISOString()),
     }
-  }, [candidates, mode, bucket, innerWidth, innerHeight])
+  }, [candidates, mode, bucket, innerWidth, innerHeight, baselineDate])
 
   const onMove = (event: PointerEvent<SVGRectElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -292,7 +336,7 @@ export function PerformanceChart({
                 textAnchor="middle"
                 className="fill-fg-faint font-mono text-[10px]"
               >
-                {formatNumber(tick, tickDigits(model.xTicks))}
+                {model.formatX(tick)}
               </text>
             ))}
             <text
@@ -302,6 +346,16 @@ export function PerformanceChart({
             >
               <SvgFormula>{yTitle}</SvgFormula>
             </text>
+            {mode !== "pareto" && model.timed ? (
+              <text
+                x={innerWidth / 2}
+                y={innerHeight + 48}
+                textAnchor="middle"
+                className="fill-fg-muted text-[11px]"
+              >
+                Candidate head commit (UTC)
+              </text>
+            ) : null}
             {mode === "pareto" ? (
               <text
                 x={innerWidth / 2}
@@ -332,8 +386,8 @@ export function PerformanceChart({
               strokeWidth={1.5}
             />
             <text
-              x={model.baseline.x + (mode === "pareto" ? 8 : 0)}
-              y={mode === "pareto" ? model.baseline.y - 8 : innerHeight + 22}
+              x={model.baseline.x + (mode === "pareto" || model.timed ? 8 : 0)}
+              y={mode === "pareto" || model.timed ? model.baseline.y - 8 : innerHeight + 22}
               className="fill-fg-faint font-mono text-[10px]"
             >
               baseline
@@ -366,7 +420,7 @@ export function PerformanceChart({
                 selected === point.candidate.prNumber || hover === point.candidate.prNumber
               return (
                 <g key={point.candidate.prNumber}>
-                  {mode === "pareto" ? null : (
+                  {mode === "pareto" || model.timed ? null : (
                     <text
                       x={point.px}
                       y={innerHeight + 22}
@@ -379,11 +433,13 @@ export function PerformanceChart({
                   {point.py === null ? (
                     <text
                       x={point.px}
-                      y={innerHeight + 36}
+                      y={model.timed ? innerHeight - 6 : innerHeight + 36}
                       textAnchor="middle"
                       className="fill-fg-faint text-[9px]"
                     >
-                      not measured
+                      {model.timed
+                        ? `#${String(point.candidate.prNumber)} not measured`
+                        : "not measured"}
                     </text>
                   ) : (
                     <>
@@ -395,6 +451,16 @@ export function PerformanceChart({
                         stroke={point.highlight ? "var(--ar-bg)" : "var(--ar-fg-muted)"}
                         strokeWidth={point.highlight ? 2 : 1.5}
                       />
+                      {mode !== "pareto" && model.timed ? (
+                        <text
+                          x={point.px}
+                          y={point.py - 10}
+                          textAnchor="middle"
+                          className="fill-fg-faint font-mono text-[10px]"
+                        >
+                          #{point.candidate.prNumber}
+                        </text>
+                      ) : null}
                       {mode === "pareto" ? (
                         <text
                           // Flip the label left when it would collide with the baseline's.
@@ -479,6 +545,12 @@ export function PerformanceChart({
                     <dd>{hoveredScore === null ? "—" : `${formatNumber(hoveredScore, 3)}×`}</dd>
                   </div>
                 </dl>
+              )}
+              {hovered.candidate.measuredAt === null ? null : (
+                <p className="mt-2 text-fg-faint">
+                  {hovered.candidate.timeSource === "commit" ? "Head commit" : "PR opened"}{" "}
+                  {formatDateTime(hovered.candidate.measuredAt)}
+                </p>
               )}
               <p className="mt-2 text-fg-faint">Click to open its breakdown</p>
             </motion.div>

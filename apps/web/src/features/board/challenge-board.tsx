@@ -25,6 +25,7 @@ export function ChallengeBoard({
   families,
   tracks,
   timeScope,
+  baselineDate,
   rankedChart,
   discussion,
   details,
@@ -34,6 +35,7 @@ export function ChallengeBoard({
   families: readonly Family[]
   tracks: readonly Track[]
   timeScope: string
+  baselineDate: string
   /** Signed-score chart, shown instead of the candidate chart once anything is ranked. */
   rankedChart: ReactNode
   discussion: ReactNode
@@ -115,6 +117,7 @@ export function ChallengeBoard({
               selected={selected}
               onSelect={select}
               timeScope={timeScope}
+              baselineDate={baselineDate}
             />
           )}
           {candidates.length === 0 ? (

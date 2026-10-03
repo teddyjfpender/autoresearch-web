@@ -15,7 +15,7 @@ import { ChallengeShowcase } from "@/features/landing/challenge-showcase"
 import { Participate } from "@/features/participate/participate"
 import { summarize } from "@/lib/scoring"
 import { buildCandidates, candidateHighlight } from "@/lib/candidates"
-import { getResearchActivity } from "@/lib/github-research"
+import { getCommitDates, getResearchActivity } from "@/lib/github-research"
 
 export const revalidate = 300
 
@@ -35,7 +35,17 @@ export default async function HomePage() {
         getResearchCases(challenge.slug),
       ])
       const activity = await getResearchActivity(challenge.links.repo)
-      const candidates = buildCandidates(challenge, reviews, measurements, activity.pulls)
+      const commitDates = await getCommitDates(
+        challenge.links.repo,
+        reviews.map((review) => review.headSha),
+      )
+      const candidates = buildCandidates(
+        challenge,
+        reviews,
+        measurements,
+        activity.pulls,
+        commitDates,
+      )
       return { challenge, scorecards, highlight: candidateHighlight(candidates) }
     }),
   )

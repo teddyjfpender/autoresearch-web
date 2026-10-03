@@ -17,7 +17,7 @@ import { IngressStudy } from "@/features/board/ingress-study"
 import { ChallengeHero } from "@/features/challenge/challenge-hero"
 import { ProgressChart } from "@/features/chart/progress-chart"
 import { buildCandidates } from "@/lib/candidates"
-import { getResearchActivity } from "@/lib/github-research"
+import { getCommitDates, getResearchActivity } from "@/lib/github-research"
 import { summarize } from "@/lib/scoring"
 
 interface Props {
@@ -50,7 +50,11 @@ export default async function ChallengePage({ params }: Props) {
   if (!challenge) notFound()
   const activity = await getResearchActivity(challenge.links.repo)
   const summary = summarize(challenge, scorecards)
-  const candidates = buildCandidates(challenge, reviews, measurements, activity.pulls)
+  const commitDates = await getCommitDates(
+    challenge.links.repo,
+    reviews.map((review) => review.headSha),
+  )
+  const candidates = buildCandidates(challenge, reviews, measurements, activity.pulls, commitDates)
 
   return (
     <>
@@ -61,6 +65,7 @@ export default async function ChallengePage({ params }: Props) {
           families={challenge.families}
           tracks={challenge.tracks}
           timeScope={challenge.contract.timeScope}
+          baselineDate={challenge.contract.baselineMeasuredAt}
           rankedChart={
             summary.ranked > 0 ? (
               <ProgressChart

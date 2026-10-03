@@ -38,6 +38,14 @@ export interface Candidate {
   author: { login: string; avatarUrl: string } | null
   url: string | null
   updatedAt: string | null
+  /** Reviewed head commit. */
+  headSha: string
+  /**
+   * When this version of the candidate existed: the reviewed head commit's date, else the
+   * PR's creation time. Null when neither is known (the chart then falls back to PR order).
+   */
+  measuredAt: string | null
+  timeSource: "commit" | "pr" | null
   /** Ratios per bucket; null when that bucket's cases weren't all measured. */
   buckets: Record<BucketId, Ratios | null>
   /** Inverse family-weighted geometric mean over the full basket; null if incomplete. */
@@ -62,6 +70,7 @@ export function buildCandidates(
   reviews: readonly ResearchReview[],
   measurements: readonly ResearchCase[],
   pulls: readonly ResearchItem[] | null,
+  commitDates: ReadonlyMap<string, string> = new Map(),
 ): Candidate[] {
   return reviews
     .toSorted((a, b) => a.prNumber - b.prNumber)
@@ -121,6 +130,15 @@ export function buildCandidates(
         author: pull?.author ?? null,
         url: pull?.url ?? null,
         updatedAt: pull?.updatedAt ?? null,
+        headSha: review.headSha,
+        ...(() => {
+          const commit = commitDates.get(review.headSha)
+          if (commit !== undefined) return { measuredAt: commit, timeSource: "commit" as const }
+          const opened = pull?.createdAt
+          return opened === undefined
+            ? { measuredAt: null, timeSource: null }
+            : { measuredAt: opened, timeSource: "pr" as const }
+        })(),
         buckets: { basket, ...perFamily },
         basketSpeedup: basket === null ? null : 1 / basket.rTime,
         cairoSpeedup: perFamily.pie === null ? null : 1 / perFamily.pie.rTime,
@@ -147,7 +165,22 @@ export function scoreFor(candidate: Candidate, track: TrackId, bucket: BucketId)
   return ratios === null ? null : trackScore(ratios, track)
 }
 
-/** Best score so far, in PR order: the "standing best" line on the chart. */
+/** True when every candidate has a timestamp, so charts can use a time axis. */
+export function allDated(candidates: readonly Candidate[]): boolean {
+  return candidates.length > 0 && candidates.every((candidate) => candidate.measuredAt !== null)
+}
+
+/** Chronological order when every candidate is dated, otherwise PR order. */
+export function chronological(candidates: readonly Candidate[]): Candidate[] {
+  return allDated(candidates)
+    ? candidates.toSorted((a, b) => {
+        const difference = Date.parse(a.measuredAt ?? "") - Date.parse(b.measuredAt ?? "")
+        return difference === 0 ? a.prNumber - b.prNumber : difference
+      })
+    : candidates.toSorted((a, b) => a.prNumber - b.prNumber)
+}
+
+/** Best score so far, in the given order: the "standing best" line on the chart. */
 export function runningBest(
   candidates: readonly Candidate[],
   track: TrackId,

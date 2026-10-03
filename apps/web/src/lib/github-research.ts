@@ -10,6 +10,7 @@ const pull = z.object({
   html_url: z.url(),
   state: z.enum(["open", "closed"]),
   draft: z.boolean(),
+  created_at: z.iso.datetime(),
   updated_at: z.iso.datetime(),
   user: actor.nullable(),
   head: z.object({ sha: z.string() }),
@@ -31,6 +32,8 @@ export interface ResearchItem {
   excerpt: string
   url: string
   updatedAt: string
+  /** When the PR was opened; set for pull requests only. */
+  createdAt?: string
   author: { login: string; avatarUrl: string } | null
   detail: string
   headSha?: string
@@ -81,6 +84,7 @@ export async function getResearchActivity(repositoryUrl: string): Promise<Resear
           excerpt: excerpt(item.body ?? ""),
           url: item.html_url,
           updatedAt: item.updated_at,
+          createdAt: item.created_at,
           author: item.user ? { login: item.user.login, avatarUrl: item.user.avatar_url } : null,
           detail: item.draft ? "Draft PR" : item.state === "open" ? "Open PR" : "Closed PR",
           headSha: item.head.sha,
@@ -126,4 +130,44 @@ export async function getResearchActivity(repositoryUrl: string): Promise<Resear
 
   const [pulls, discussions] = await Promise.all([pullsPromise, discussionsPromise])
   return { pulls, discussions }
+}
+
+const commitSchema = z.object({
+  commit: z.object({ committer: z.object({ date: z.iso.datetime() }).nullable() }),
+})
+
+/**
+ * Committer timestamps for specific commits (e.g. the reviewed head of each candidate PR).
+ * Unresolvable commits are simply absent from the map; callers fall back as they see fit.
+ */
+export async function getCommitDates(
+  repositoryUrl: string,
+  shas: readonly string[],
+): Promise<Map<string, string>> {
+  const url = new URL(repositoryUrl)
+  const [owner, name] = url.pathname.split("/").filter(Boolean)
+  if (owner === undefined || name === undefined) return new Map()
+  const token = process.env["GITHUB_READ_TOKEN"]
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+  }
+  if (token !== undefined && token !== "") headers["Authorization"] = `Bearer ${token}`
+  const entries = await Promise.all(
+    [...new Set(shas)].map(async (sha) => {
+      try {
+        // Commits are immutable, so their dates can be cached for a long time.
+        const response = await fetch(
+          `https://api.github.com/repos/${owner}/${name}/commits/${sha}`,
+          { headers, next: { revalidate: 86_400 } },
+        )
+        if (!response.ok) return null
+        const date = commitSchema.parse(await response.json()).commit.committer?.date
+        return date === undefined ? null : ([sha, date] as const)
+      } catch {
+        return null
+      }
+    }),
+  )
+  return new Map(entries.filter((entry) => entry !== null))
 }
