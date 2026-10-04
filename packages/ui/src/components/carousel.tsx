@@ -23,6 +23,12 @@ export interface CarouselProps {
  * Horizontal, scroll-snapped carousel. Native scrolling (touch, trackpad, keyboard) drives it;
  * the controls and counter only call `scrollTo`, so nothing fights the browser.
  */
+/** Scroll offset that puts `child` at the track's start edge, inside its padding. */
+const slideLeft = (track: HTMLElement, child: Element) =>
+  (child as HTMLElement).offsetLeft -
+  track.offsetLeft -
+  Number.parseFloat(getComputedStyle(track).paddingLeft)
+
 export function Carousel({
   slides,
   label,
@@ -56,26 +62,52 @@ export function Carousel({
   useEffect(() => {
     const node = trackRef.current
     if (!node) return
-    // A horizontal trackpad swipe also carries small vertical deltas; left alone, the page (or a
-    // smooth-scroll library listening on window) would drift up and down while browsing. Claim
-    // horizontal-dominant wheel gestures for the track, pausing snap until the gesture settles.
-    let settle: number | undefined
+    // Horizontal swipes scroll the track natively, so momentum and snapping stay smooth. The
+    // gesture's small vertical deltas must not reach a smooth-scroll library listening on
+    // window, so a gesture that starts horizontal is kept from bubbling until it goes idle;
+    // the browser latches the rest of the gesture to the track.
+    let horizontal = false
+    let idle: number | undefined
     const onWheel = (event: WheelEvent) => {
-      if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return
-      event.preventDefault()
+      if (!horizontal && Math.abs(event.deltaX) > Math.abs(event.deltaY)) horizontal = true
+      if (!horizontal) return
       event.stopPropagation()
-      node.style.scrollSnapType = "none"
-      node.scrollLeft += event.deltaX
-      window.clearTimeout(settle)
-      settle = window.setTimeout(() => {
-        node.style.scrollSnapType = ""
-      }, 140)
+      window.clearTimeout(idle)
+      idle = window.setTimeout(() => {
+        horizontal = false
+        snap()
+      }, 180)
     }
-    node.addEventListener("scroll", measure, { passive: true })
-    node.addEventListener("wheel", onWheel, { passive: false })
-    return () => {
+    // Snap in script, not CSS: once momentum ends, ease onto the nearest slide. CSS mandatory
+    // snapping re-targets mid-gesture on trackpads, which reads as jumping.
+    let settle: number | undefined
+    const snap = () => {
+      if (horizontal) return
+      const atEnd = node.scrollLeft >= node.scrollWidth - node.clientWidth - 2
+      if (atEnd) return
+      const lefts = [...node.children].map((child) => slideLeft(node, child))
+      const nearest = lefts.reduce(
+        (best, left) =>
+          Math.abs(left - node.scrollLeft) < Math.abs(best - node.scrollLeft) ? left : best,
+        0,
+      )
+      if (Math.abs(nearest - node.scrollLeft) > 2)
+        node.scrollTo({ left: nearest, behavior: "smooth" })
+    }
+    let frame = 0
+    const onScroll = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(measure)
       window.clearTimeout(settle)
-      node.removeEventListener("scroll", measure)
+      settle = window.setTimeout(snap, 160)
+    }
+    node.addEventListener("scroll", onScroll, { passive: true })
+    node.addEventListener("wheel", onWheel, { passive: true })
+    return () => {
+      window.clearTimeout(idle)
+      window.clearTimeout(settle)
+      cancelAnimationFrame(frame)
+      node.removeEventListener("scroll", onScroll)
       node.removeEventListener("wheel", onWheel)
     }
   }, [measure])
@@ -84,7 +116,7 @@ export function Carousel({
     const node = trackRef.current
     const target = node?.children[Math.max(0, Math.min(slides.length - 1, index))]
     if (!node || !(target instanceof HTMLElement)) return
-    node.scrollTo({ left: target.offsetLeft - node.offsetLeft, behavior: "smooth" })
+    node.scrollTo({ left: slideLeft(node, target), behavior: "smooth" })
   }
 
   const control =
@@ -98,7 +130,7 @@ export function Carousel({
     >
       <div
         ref={trackRef}
-        className="-mx-4 flex touch-pan-x snap-x snap-mandatory scroll-px-4 [scrollbar-width:none] gap-4 overflow-x-auto overscroll-x-contain px-4 pb-2 sm:-mx-0 sm:scroll-px-0 sm:px-0 [&::-webkit-scrollbar]:hidden"
+        className="-mx-4 flex scroll-px-4 [scrollbar-width:none] gap-4 overflow-x-auto overscroll-x-contain px-4 pb-2 sm:-mx-0 sm:scroll-px-0 sm:px-0 [&::-webkit-scrollbar]:hidden"
       >
         {slides.map((slide, index) => (
           <div
@@ -106,7 +138,7 @@ export function Carousel({
             role="group"
             aria-roledescription="slide"
             aria-label={`${String(index + 1)} of ${String(slides.length)}`}
-            className={cn("shrink-0 snap-start", slideClassName)}
+            className={cn("shrink-0", slideClassName)}
           >
             {slide.content}
           </div>
