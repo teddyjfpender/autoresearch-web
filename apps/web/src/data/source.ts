@@ -2,7 +2,9 @@ import "server-only"
 
 import { cache } from "react"
 
+import cspContent from "./content/challenges/riscv-csp/challenge.json"
 import stwoContent from "./content/challenges/stwo/challenge.json"
+import { cspCaseId } from "./csp-parser"
 import siteJson from "./content/site.json"
 import { getChallengeRepositoryData } from "./github-challenge"
 import { latestObservations, type BackendId } from "./proof-parser"
@@ -30,7 +32,7 @@ import {
  *   measured facts, reviewed PRs, and independently checked signed scorecards.
  */
 /** Shared challenge definitions; each expands into one route per backend. */
-const CHALLENGE_FAMILIES: readonly unknown[] = [stwoContent]
+const CHALLENGE_FAMILIES: readonly unknown[] = [stwoContent, cspContent]
 
 type Imported = Awaited<ReturnType<typeof getChallengeRepositoryData>>
 type Gate = Challenge["gates"][number]
@@ -122,9 +124,93 @@ function derivedGates(cases: Challenge["cases"], host: string): Gate[] {
   ]
 }
 
-/** Expand one shared definition into one challenge per backend. */
+/** Expand one shared definition into one challenge per backend, via its data adapter. */
 function joinChallenges(raw: unknown, imported: Imported): Challenge[] {
   const content = challengeContentSchema.parse(raw)
+  return content.kind === "riscv-csp" ? joinCsp(content, imported) : joinStwo(content, imported)
+}
+
+type Content = ReturnType<typeof challengeContentSchema.parse>
+
+const withBackend = (steps: Content["participate"], backend: string) =>
+  steps.map((step) =>
+    step.command === undefined
+      ? step
+      : { ...step, command: step.command.replaceAll("{backend}", backend) },
+  )
+
+/**
+ * RISC-V CSP routes: cases and shapes from the pinned suite manifest, the contract from
+ * benchmark-riscv-csp-v1.json. No baseline is published yet, so every proof time is pending.
+ */
+function joinCsp(content: Content, imported: Imported): Challenge[] {
+  const csp = imported.csp
+  if (csp === null) return []
+  const siblings = content.backends.map(({ id, slug, name }) => ({ id, slug, name }))
+  return content.backends.flatMap((backend) => {
+    const spec = csp.contract.backends[backend.id]
+    if (spec === undefined) return []
+    const cases = content.cases.map((testCase) => {
+      const [target = "", size = ""] = testCase.id.split(":")
+      const shape = csp.fixture.targets[target]
+      const fixtureCase = shape?.cases.find(
+        (item) => cspCaseId(target, item.input_size) === cspCaseId(target, Number(size)),
+      )
+      if (!shape || !fixtureCase) throw new Error(`CSP case ${testCase.id} is not in the fixture`)
+      return {
+        ...testCase,
+        ...caseMeasuredSchema.parse({
+          id: testCase.id,
+          family: target,
+          inputSize: fixtureCase.input_size,
+          inputUnit: shape.input_size_unit,
+          cycles: fixtureCase.expected_cycles,
+          baseline: {
+            proofTimeS: null,
+            runProofTimesS: [],
+            proofTimeScope: "Not yet measured on this host",
+            arenaBytes: null,
+            commandTimeS: null,
+            peakBytes: null,
+            rounds: 0,
+            source: `${spec.host} baseline pending`,
+          },
+        }),
+        id: testCase.id,
+      }
+    })
+    const contract = contractImportedSchema.parse({
+      backend: backend.id,
+      contractEpoch: csp.contract.contractEpoch,
+      baselineMeasuredAt: imported.repositoryDate.slice(0, 10),
+      baselineQualification: "pending",
+      sourceRepository: csp.contract.sourceRepository.replace(/\.git$/, ""),
+      sourceCommit: csp.contract.sourceCommit,
+      editablePaths: spec.editablePaths,
+      hardware: { gpu: spec.host },
+      security: {
+        friQueries: csp.contract.security.friQueries,
+        queryPowBits: csp.contract.security.powBits,
+        preprocessedVariant: csp.contract.proofSuite,
+      },
+    })
+    return [
+      challengeSchema.parse({
+        ...content,
+        ...backend,
+        backend: backend.id,
+        siblings,
+        status: csp.contract.status,
+        gates: derivedGates(cases, spec.host),
+        contract: { ...content.contract, ...contract },
+        cases,
+        participate: withBackend(content.participate, backend.id),
+      }),
+    ]
+  })
+}
+
+function joinStwo(content: Content, imported: Imported): Challenge[] {
   const v1 = contractImportedSchema.parse(imported.contract)
   const proof = imported.proofContract
   const siblings = content.backends.map(({ id, slug, name }) => ({ id, slug, name }))
@@ -176,11 +262,7 @@ function joinChallenges(raw: unknown, imported: Imported): Challenge[] {
       gates: backend.id === "cuda" ? imported.activation.gates : derivedGates(cases, host),
       contract: { ...content.contract, ...contract },
       cases,
-      participate: content.participate.map((step) =>
-        step.command === undefined
-          ? step
-          : { ...step, command: step.command.replaceAll("{backend}", backend.id) },
-      ),
+      participate: withBackend(content.participate, backend.id),
     })
   })
 }
@@ -201,7 +283,10 @@ export const getChallenge = cache(async (slug: string): Promise<Challenge | unde
 })
 
 /** The H200 research feed and judge receipts belong to the CUDA backend route. */
-const isCuda = async (slug: string) => (await getChallenge(slug))?.backend === "cuda"
+const isCuda = async (slug: string) => {
+  const challenge = await getChallenge(slug)
+  return challenge?.kind === "stwo-proof" && challenge.backend === "cuda"
+}
 
 /** Judge-signed rank scorecards, oldest first. Empty until the H200 judge is live. */
 export const getScorecards = cache(async (slug: string): Promise<readonly Scorecard[]> => {
@@ -218,7 +303,9 @@ export const getScorecards = cache(async (slug: string): Promise<readonly Scorec
  * accepted research is published to these tables; it stays reported, direct and unranked.
  */
 async function backendResearch(slug: string) {
-  const backend = (await getChallenge(slug))?.backend
+  const challenge = await getChallenge(slug)
+  // These tables belong to the Stwo proof track; other tracks publish their own.
+  const backend = challenge?.kind === "stwo-proof" ? challenge.backend : null
   const rows = (await getChallengeRepositoryData()).proofResearch.filter(
     (row) => row.backend === backend,
   )

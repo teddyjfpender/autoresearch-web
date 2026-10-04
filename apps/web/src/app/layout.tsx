@@ -7,6 +7,7 @@ import type { ReactNode } from "react"
 
 import { SiteFooter } from "@/features/site/site-footer"
 import { SiteHeader } from "@/features/site/site-header"
+import { agentPrompt } from "@/lib/prompt"
 import { SmoothScroll } from "@/features/site/smooth-scroll"
 import { getChallenges, getSite } from "@/data/source"
 
@@ -69,9 +70,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             challenges={challenges.map((challenge) => ({
               slug: challenge.slug,
               name: challenge.name,
-              backend: challenge.backend,
-              host: challenge.contract.hardware.gpu,
-              repositoryUrl: challenge.links.repo,
+              prompt: agentPrompt(challenge),
             }))}
           />
           <main id="main">{children}</main>

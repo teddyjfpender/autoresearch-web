@@ -36,7 +36,7 @@ export function Hero({
   const ranked = summary.ranked > 0
   const primary = featured.tracks[0]
   const gpu = featured.contract.hardware.gpu
-  const backends = challenges.map((challenge) => challenge.backend.toUpperCase()).join(" · ")
+  const groups = [...new Set(challenges.map((challenge) => challenge.group))].join(" · ")
   // Real numbers only: ranked leaders once the judge is live; otherwise the Cairo proof time
   // removed since the first recorded prover, then the latest reviewed candidate.
   const lead = ranked
@@ -62,7 +62,7 @@ export function Hero({
           }
         : null
   const figures = [
-    { label: "Challenges", value: formatNumber(challenges.length), hint: backends },
+    { label: "Challenges", value: formatNumber(challenges.length), hint: groups },
     progress
       ? {
           label: "Cairo proofs",

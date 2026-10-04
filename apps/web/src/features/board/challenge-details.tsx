@@ -53,13 +53,20 @@ export function ChallengeDetails({ challenge }: { challenge: Challenge }) {
   const stageName = new Map(stages.map((stage) => [stage.id, stage.name]))
   const familyShare = formatNumber(100 / families.length, 0)
 
+  const { deviceBytes } = contract.hardware
+  const { interactionPowBits } = contract.security
   const facts = [
     { label: "Hardware", value: `1× ${contract.hardware.gpu}` },
-    { label: "Device memory", value: formatGB(contract.hardware.deviceBytes, 2) },
+    deviceBytes === undefined
+      ? { label: "Proof suite", value: contract.security.preprocessedVariant }
+      : { label: "Device memory", value: formatGB(deviceBytes, 2) },
     { label: "FRI queries", value: String(contract.security.friQueries) },
     {
       label: "PoW bits",
-      value: `${String(contract.security.queryPowBits)} / ${String(contract.security.interactionPowBits)}`,
+      value:
+        interactionPowBits === undefined
+          ? String(contract.security.queryPowBits)
+          : `${String(contract.security.queryPowBits)} / ${String(interactionPowBits)}`,
     },
     { label: "Pinned stwo-zig", value: contract.sourceCommit.slice(0, 8) },
     { label: "Epoch", value: contract.draft ? `${contract.epoch} (draft)` : contract.epoch },

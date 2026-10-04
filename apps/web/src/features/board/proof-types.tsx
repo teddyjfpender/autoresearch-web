@@ -3,16 +3,28 @@
 import { SegmentedControl } from "@autoresearch/ui/components/segmented-control"
 import { formatNumber } from "@autoresearch/ui/lib/format"
 import { cn } from "@autoresearch/ui/lib/cn"
-import { AnimatePresence, motion, useInView, useReducedMotion } from "motion/react"
+import { AnimatePresence, animate, motion, useInView, useReducedMotion } from "motion/react"
 import { useEffect, useRef, useState, type SVGProps } from "react"
 
 import type { Challenge } from "@/data/schema"
 import { formatSeconds } from "@/lib/format"
 
-type ProofTypeId = "cairo" | "wrap" | "fold" | "pipeline"
+type SceneId = "cairo" | "wrap" | "fold" | "pipeline" | "guest"
+
+/** What a full-guest scene draws for one target, from the pinned suite. */
+interface GuestShape {
+  /** Largest pinned input's execution cycles. */
+  cycles: number
+  /** Short input label, e.g. "2 KiB" or "16 × M31". */
+  input: string
+  /** Whether the guest calls a proved precompile (ECDSA). */
+  precompile: boolean
+}
 
 interface ProofType {
-  id: ProofTypeId
+  id: string
+  scene: SceneId
+  guest?: GuestShape
   name: string
   explainer: string
   inputs: string
@@ -28,6 +40,62 @@ const range = (values: readonly number[], format: (value: number) => string) =>
 
 /** Every fact is derived from the challenge's fixture and baselines. */
 function proofTypes(challenge: Challenge): ProofType[] {
+  return challenge.kind === "riscv-csp" ? guestTypes(challenge) : stwoTypes(challenge)
+}
+
+const UNIT: Record<string, (size: number) => string> = {
+  bytes: (size) => (size >= 1024 ? `${formatNumber(size / 1024)} KiB` : `${formatNumber(size)} B`),
+  field_elements: (size) => `${formatNumber(size)} × M31`,
+}
+
+/** RISC-V CSP: one full-guest proof type per target, shaped by the pinned suite. */
+function guestTypes(challenge: Challenge): ProofType[] {
+  const precompile = (id: string) => id.startsWith("ecdsa")
+  return challenge.families.map((family) => {
+    const cases = challenge.cases.filter((testCase) => testCase.family === family.id)
+    const sizes = cases.flatMap((testCase) =>
+      testCase.inputSize === undefined ? [] : [testCase.inputSize],
+    )
+    const cycles = cases.flatMap((testCase) =>
+      testCase.cycles === undefined ? [] : [testCase.cycles],
+    )
+    const unit = cases[0]?.inputUnit ?? ""
+    const sizeLabel = (size: number) =>
+      precompile(family.id) ? "signature" : (UNIT[unit] ?? ((value) => formatNumber(value)))(size)
+    const measured = cases.flatMap((testCase) =>
+      testCase.baseline.proofTimeS === null ? [] : [testCase.baseline.proofTimeS],
+    )
+    return {
+      id: family.id,
+      scene: "guest" as const,
+      guest: {
+        cycles: cycles.length === 0 ? 0 : Math.max(...cycles),
+        input: sizes.length === 0 ? "input" : sizeLabel(Math.max(...sizes)),
+        precompile: precompile(family.id),
+      },
+      name: family.name,
+      explainer: family.explainer ?? family.description,
+      inputs: family.inputs ?? "",
+      facts: [
+        { label: "Cases", value: formatNumber(cases.length) },
+        {
+          label: precompile(family.id) ? "Input" : "Input sizes",
+          value: precompile(family.id) ? "digest · key · signature" : range(sizes, sizeLabel),
+        },
+        {
+          label: "Guest cycles",
+          value: range(cycles, (value) => formatNumber(value)),
+        },
+        {
+          label: "Baseline on this host",
+          value: measured.length === 0 ? "Pending" : range(measured, formatSeconds),
+        },
+      ],
+    }
+  })
+}
+
+function stwoTypes(challenge: Challenge): ProofType[] {
   const { cases, stages, families } = challenge
   const pies = cases.filter((testCase) => testCase.family === "pie")
   const folds = cases.filter((testCase) => testCase.family === "recursion")
@@ -54,6 +122,7 @@ function proofTypes(challenge: Challenge): ProofType[] {
   if (cairo)
     out.push({
       id: "cairo",
+      scene: "cairo",
       name: cairo.name,
       explainer: cairo.explainer,
       inputs: cairo.inputs,
@@ -71,6 +140,7 @@ function proofTypes(challenge: Challenge): ProofType[] {
   if (wrap)
     out.push({
       id: "wrap",
+      scene: "wrap",
       name: wrap.name,
       explainer: wrap.explainer,
       inputs: wrap.inputs,
@@ -86,6 +156,7 @@ function proofTypes(challenge: Challenge): ProofType[] {
   if (fold)
     out.push({
       id: "fold",
+      scene: "fold",
       name: fold.name,
       explainer: fold.explainer,
       inputs: fold.inputs,
@@ -108,6 +179,7 @@ function proofTypes(challenge: Challenge): ProofType[] {
   if (pipelineFamily?.explainer !== undefined && pipelineFamily.inputs !== undefined)
     out.push({
       id: "pipeline",
+      scene: "pipeline",
       name: pipelineFamily.name,
       explainer: pipelineFamily.explainer,
       inputs: pipelineFamily.inputs,
@@ -145,6 +217,8 @@ const OVERLAY: Record<Status, number> = { idle: 0, active: 1, done: 0.5 }
 
 /** Shape of the drawn workload, read from the fixture so the diagrams match the basket. */
 interface SceneSpec {
+  /** Proof system label from the contract, e.g. "BLAKE3 STARK". */
+  suite: string
   blocks: number
   foldLeaves: number
   pipelineLeaves: number
@@ -163,7 +237,9 @@ function sceneSpec(challenge: Challenge): SceneSpec {
   const blocks = challenge.cases.flatMap((testCase) =>
     testCase.blocks ? [testCase.blocks[1] - testCase.blocks[0] + 1] : [],
   )
+  const { security } = challenge.contract
   return {
+    suite: `${security.preprocessedVariant.toUpperCase()} STARK`,
     blocks: Math.max(1, Math.min(4, ...(blocks.length === 0 ? [3] : [Math.max(...blocks)]))),
     foldLeaves: powerOfTwo(leaves("recursion")),
     pipelineLeaves: Math.min(4, leaves("pipeline")),
@@ -794,14 +870,198 @@ function PipelineScene({ phase, spec }: { phase: number; spec: SceneSpec }) {
   )
 }
 
+/* RISC-V guest: execute the guest on its input, build the witness, prove it with Stwo. */
+const GUEST_STEPS = ["Execute", "Witness", "Prove"] as const
+const INSTRUCTIONS = [
+  "lw    a0, 0(s1)",
+  "add   a1, a1, a0",
+  "srli  t0, a1, 7",
+  "xor   a2, a2, t0",
+  "slli  t1, a2, 3",
+  "and   a3, a3, t1",
+  "sw    a3, 4(s1)",
+  "bne   s1, s2, -28",
+] as const
+
+/** Counts cycles up while execution runs; a static total otherwise. */
+function CycleCount({ cycles, status }: { cycles: number; status: Status }) {
+  const ref = useRef<SVGTSpanElement>(null)
+  const reduce = useReducedMotion() === true
+  useEffect(() => {
+    const node = ref.current
+    if (!node || reduce || status !== "active") return
+    const controls = animate(0, cycles, {
+      duration: (STEP_MS / 1000) * 0.9,
+      ease: "easeOut",
+      onUpdate: (value) => {
+        node.textContent = formatNumber(Math.round(value))
+      },
+    })
+    return () => {
+      controls.stop()
+    }
+  }, [cycles, status, reduce])
+  return (
+    <tspan ref={ref} className="fill-fg">
+      {status === "idle" ? "0" : formatNumber(cycles)}
+    </tspan>
+  )
+}
+
+function GuestScene({ phase, spec, type }: { phase: number; spec: SceneSpec; type: ProofType }) {
+  const [execute, witness, prove] = [0, 1, 2].map((step) => statusOf(phase, step)) as [
+    Status,
+    Status,
+    Status,
+  ]
+  const guest = type.guest ?? { cycles: 0, input: "input", precompile: false }
+  const lineH = 13
+  const lines = guest.precompile
+    ? [...INSTRUCTIONS.slice(0, 3), "ecall secp256k1", ...INSTRUCTIONS.slice(3)]
+    : INSTRUCTIONS
+  const cols = 7
+  const rows = 11
+  return (
+    <>
+      {/* Inputs: the pinned guest binary and its input */}
+      {(
+        [
+          [64, "guest.elf"],
+          [122, guest.input],
+        ] as const
+      ).map(([y, text]) => (
+        <g key={y}>
+          <rect x={12} y={y} width={78} height={28} rx={6} fill="var(--ar-surface)" />
+          <text
+            x={51}
+            y={y + 14}
+            dy="0.34em"
+            textAnchor="middle"
+            className="fill-fg-muted font-mono text-[9px]"
+          >
+            {text}
+          </text>
+        </g>
+      ))}
+      <Flow d="M90,78 C 100,78 100,112 112,112" status={execute} />
+      <Flow d="M90,136 C 100,136 100,112 112,112" status={execute} />
+      {/* The RISC-V CPU running the guest */}
+      <Region x={114} y={52} w={112} h={guest.precompile ? 104 : 120} status={execute} />
+      <clipPath id="guest-cpu">
+        <rect x={114} y={60} width={112} height={guest.precompile ? 90 : 106} />
+      </clipPath>
+      <motion.g
+        clipPath="url(#guest-cpu)"
+        initial={false}
+        animate={{ y: execute === "active" ? [0, -lineH * lines.length] : 0 }}
+        transition={
+          execute === "active"
+            ? { duration: (STEP_MS / 1000) * 0.9, ease: "linear" }
+            : { duration: 0.4, ease: EASE }
+        }
+      >
+        {[...lines, ...lines].map((line, index) => (
+          <text
+            key={`${line}-${String(index)}`}
+            x={124}
+            y={70 + index * lineH}
+            className={cn(
+              "font-mono text-[9px]",
+              line.startsWith("ecall") ? "fill-accent" : "fill-fg-muted",
+            )}
+          >
+            {line}
+          </text>
+        ))}
+      </motion.g>
+      {guest.precompile ? (
+        <g>
+          <Flow d="M170,156 V166" status={execute} />
+          <Region x={124} y={166} w={92} h={22} r={6} status={execute} />
+          <text
+            x={170}
+            y={177}
+            dy="0.34em"
+            textAnchor="middle"
+            className="fill-fg-muted font-mono text-[9px]"
+          >
+            ECDSA precompile
+          </text>
+        </g>
+      ) : null}
+      <Flow d="M226,112 H246" status={witness} />
+      {/* Witness: execution laid out as AIR trace columns */}
+      {Array.from({ length: rows * cols }, (_, index) => {
+        const row = Math.floor(index / cols)
+        const col = index % cols
+        return (
+          <motion.rect
+            key={index}
+            x={250 + col * 11}
+            y={62 + row * 9.4}
+            width={8.5}
+            height={6.5}
+            rx={1.5}
+            fill="var(--ar-accent)"
+            initial={false}
+            animate={{
+              opacity:
+                witness === "idle"
+                  ? 0.07
+                  : witness === "active"
+                    ? 0.75
+                    : prove === "active"
+                      ? 0.5
+                      : 0.3,
+            }}
+            transition={{
+              duration: 0.3,
+              delay: witness === "active" ? (col / cols) * (STEP_MS / 1000) * 0.75 + row * 0.01 : 0,
+            }}
+          />
+        )
+      })}
+      <Flow d="M330,112 H382" status={prove} />
+      <Glyph x={406} y={112} kind="stark" status={prove} />
+      {(
+        [
+          [51, "input", execute],
+          [170, "RISC-V guest", execute],
+          [288, "witness", witness],
+          [406, "proof", prove],
+        ] as const
+      ).map(([x, text, status]) => (
+        <text key={text} x={x} y={36} textAnchor="middle" className={caption(status)}>
+          {text}
+        </text>
+      ))}
+      <text x={170} y={204} textAnchor="middle" className="fill-fg-faint font-mono text-[9px]">
+        cycles <CycleCount cycles={guest.cycles} status={execute} />
+      </text>
+      <text x={288} y={204} textAnchor="middle" className="fill-fg-faint font-mono text-[9px]">
+        RISC-V AIR trace
+      </text>
+      <text x={406} y={204} textAnchor="middle" className="fill-fg-faint font-mono text-[9px]">
+        {spec.suite}
+      </text>
+    </>
+  )
+}
+
 const SCENES: Record<
-  ProofTypeId,
+  SceneId,
   {
     steps: (spec: SceneSpec) => readonly string[]
     label: string
-    Scene: (props: { phase: number; spec: SceneSpec }) => React.JSX.Element
+    Scene: (props: { phase: number; spec: SceneSpec; type: ProofType }) => React.JSX.Element
   }
 > = {
+  guest: {
+    steps: () => GUEST_STEPS,
+    label:
+      "A RISC-V guest executes on its input, its execution becomes a witness, and Stwo proves it",
+    Scene: GuestScene,
+  },
   cairo: {
     steps: () => CAIRO_STEPS,
     label:
@@ -883,8 +1143,8 @@ function StepRail({
 }
 
 /** One scene on its own clock; remounted per proof type so every story starts from step one. */
-function Stage({ id, spec }: { id: ProofTypeId; spec: SceneSpec }) {
-  const scene = SCENES[id]
+function Stage({ type, spec }: { type: ProofType; spec: SceneSpec }) {
+  const scene = SCENES[type.scene]
   const steps = scene.steps(spec)
   const { ref, phase, setPhase } = useTimeline(steps.length)
   const { Scene } = scene
@@ -897,7 +1157,7 @@ function Stage({ id, spec }: { id: ProofTypeId; spec: SceneSpec }) {
           role="img"
           aria-label={scene.label}
         >
-          <Scene phase={phase} spec={spec} />
+          <Scene phase={phase} spec={spec} type={type} />
         </svg>
       </div>
       <StepRail steps={steps} phase={phase} onSelect={setPhase} />
@@ -911,7 +1171,7 @@ function Stage({ id, spec }: { id: ProofTypeId; spec: SceneSpec }) {
  */
 export function ProofTypes({ challenge }: { challenge: Challenge }) {
   const types = proofTypes(challenge)
-  const [active, setActive] = useState<ProofTypeId>(types[0]?.id ?? "cairo")
+  const [active, setActive] = useState(types[0]?.id ?? "")
   const current = types.find((type) => type.id === active) ?? types[0]
   if (current === undefined) return null
   const spec = sceneSpec(challenge)
@@ -936,7 +1196,7 @@ export function ProofTypes({ challenge }: { challenge: Challenge }) {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
             >
-              <Stage id={current.id} spec={spec} />
+              <Stage type={current} spec={spec} />
             </motion.div>
           </AnimatePresence>
         </div>

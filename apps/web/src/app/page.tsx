@@ -57,8 +57,12 @@ export default async function HomePage() {
         challenge,
         scorecards,
         candidates: candidates.length,
-        highlight: candidateHighlight(candidates),
-        progress: cairoProgress(candidates, historyMilestones(proofProgress)),
+        highlight: candidateHighlight(candidates, challenge.focus.family),
+        progress: cairoProgress(
+          candidates,
+          historyMilestones(proofProgress),
+          challenge.focus.family,
+        ),
       }
     }),
   )

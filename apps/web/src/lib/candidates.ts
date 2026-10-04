@@ -20,8 +20,8 @@ export interface CandidateCase {
   candidatePeakGiB: number | null
 }
 
-/** A job-type slice of the basket: the whole family-weighted basket, or one family. */
-export type BucketId = "basket" | FamilyId
+/** A job-type slice of the basket: "basket" (all families, equally weighted) or a family id. */
+export type BucketId = FamilyId
 
 /** Weighted geometric-mean time and memory ratios for one bucket (candidate ÷ baseline). */
 export interface Ratios {
@@ -46,18 +46,18 @@ export interface Candidate {
    */
   measuredAt: string | null
   timeSource: "commit" | "pr" | null
-  /** Ratios per bucket; null when that bucket's cases weren't all measured. */
-  buckets: Record<BucketId, Ratios | null>
+  /** Ratios per bucket; null when that bucket's cases weren't all measured. Read via `ratiosFor`. */
+  buckets: Readonly<Partial<Record<BucketId, Ratios | null>>>
   /** Inverse family-weighted geometric mean over the full basket; null if incomplete. */
   basketSpeedup: number | null
-  /** Inverse geometric mean over the Cairo (PIE) family only; null if incomplete. */
-  cairoSpeedup: number | null
   cases: CandidateCase[]
   /** Measured cases / cases in the basket. */
   coverage: { measured: number; total: number }
 }
 
-const FAMILIES: readonly FamilyId[] = ["pie", "recursion", "pipeline"]
+/** One bucket's ratios, or null when its cases weren't all measured (or it doesn't exist). */
+export const ratiosFor = (candidate: Candidate, bucket: BucketId): Ratios | null =>
+  candidate.buckets[bucket] ?? null
 
 /**
  * Paired proof-stage times for one research row, or null when either arm lacks a proof-only
@@ -117,15 +117,12 @@ export function buildCandidates(
             }
           : null
       }
-      const perFamily = Object.fromEntries(
-        FAMILIES.map((family) => [family, familyRatios(family)]),
-      ) as Record<FamilyId, Ratios | null>
-      const complete = FAMILIES.map((family) => perFamily[family]).filter(
-        (value): value is Ratios => value !== null,
-      )
+      const families = challenge.families.map((family) => family.id)
+      const perFamily = new Map(families.map((family) => [family, familyRatios(family)]))
+      const complete = [...perFamily.values()].filter((value): value is Ratios => value !== null)
       // Each family carries equal log-weight in the basket, as in the judge's scorer.
       const basket: Ratios | null =
-        complete.length === FAMILIES.length
+        complete.length === families.length
           ? {
               rTime: geomean(complete.map((value) => value.rTime)),
               rMemory: geomean(complete.map((value) => value.rMemory)),
@@ -150,9 +147,8 @@ export function buildCandidates(
             ? { measuredAt: null, timeSource: null }
             : { measuredAt: opened, timeSource: "pr" as const }
         })(),
-        buckets: { basket, ...perFamily },
+        buckets: { basket, ...Object.fromEntries(perFamily) },
         basketSpeedup: basket === null ? null : 1 / basket.rTime,
-        cairoSpeedup: perFamily.pie === null ? null : 1 / perFamily.pie.rTime,
         cases,
         coverage: { measured: cases.length, total: challenge.cases.length },
       }
@@ -172,7 +168,7 @@ export function trackScore(ratios: Ratios, track: TrackId): number {
 }
 
 export function scoreFor(candidate: Candidate, track: TrackId, bucket: BucketId): number | null {
-  const ratios = candidate.buckets[bucket]
+  const ratios = ratiosFor(candidate, bucket)
   return ratios === null ? null : trackScore(ratios, track)
 }
 
@@ -208,7 +204,7 @@ export function runningBest(
 /** Candidates no other candidate (or the baseline) beats on both time and memory. */
 export function paretoIds(candidates: readonly Candidate[], bucket: BucketId): Set<number> {
   const points = candidates.flatMap((candidate) => {
-    const ratios = candidate.buckets[bucket]
+    const ratios = ratiosFor(candidate, bucket)
     return ratios === null ? [] : [{ id: candidate.prNumber, ...ratios }]
   })
   const all = [...points, { id: 0, rTime: 1, rMemory: 1 }]
@@ -248,13 +244,16 @@ export interface CandidateHighlight {
  * The newest directly promoted candidate with a complete basket in which every Cairo case
  * improved. Shared by both routes so their headline figures always agree.
  */
-export function candidateHighlight(candidates: readonly Candidate[]): CandidateHighlight | null {
+export function candidateHighlight(
+  candidates: readonly Candidate[],
+  family: FamilyId,
+): CandidateHighlight | null {
   const candidate = candidates
     .filter((item) => item.reviewState === "promoted_direct" && item.basketSpeedup !== null)
     .toSorted((a, b) => b.prNumber - a.prNumber)[0]
   if (candidate?.basketSpeedup == null) return null
   const reductions = candidate.cases
-    .filter((item) => item.family === "pie")
+    .filter((item) => item.family === family)
     .map((item) => 1 - item.ratio)
   if (reductions.length === 0 || reductions.some((value) => value <= 0)) return null
   return {
@@ -357,13 +356,14 @@ export interface CairoProgress {
 export function cairoProgress(
   candidates: readonly Candidate[],
   history: readonly HistoryMilestone[],
+  family: FamilyId,
 ): CairoProgress | null {
   const first = history[0]
   if (first === undefined) return null
   const best = Math.max(
     1,
     ...candidates.flatMap((candidate) => {
-      const value = scoreFor(candidate, "latency", "pie")
+      const value = scoreFor(candidate, "latency", family)
       return value === null ? [] : [value]
     }),
   )

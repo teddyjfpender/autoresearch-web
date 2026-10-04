@@ -11,6 +11,7 @@ import {
   proofFixtureSchema,
   type ProofObservation,
 } from "./proof-parser"
+import { cspContractSchema, cspFixtureSchema } from "./csp-parser"
 import { verifyScorecards } from "./verify-scorecards"
 import stwoContent from "./content/challenges/stwo/challenge.json"
 
@@ -18,7 +19,10 @@ const REVALIDATE_SECONDS = 300
 const REF_REVALIDATE_SECONDS = 60
 const REPOSITORY = new URL(stwoContent.links.repo).pathname.replace(/^\//, "")
 const SOURCES_PATH = "data/site/sources.json"
-const commitSchema = z.object({ sha: z.string().regex(/^[0-9a-f]{40}$/) })
+const commitSchema = z.object({
+  sha: z.string().regex(/^[0-9a-f]{40}$/),
+  commit: z.object({ committer: z.object({ date: z.iso.datetime() }) }),
+})
 
 /** One immutable repository revision supplies every measured value on both site routes. */
 export const getChallengeRepositoryData = cache(async () => {
@@ -37,7 +41,12 @@ export const getChallengeRepositoryData = cache(async () => {
   )
   if (!refResponse.ok)
     throw new Error(`Challenge repository commit API: ${String(refResponse.status)}`)
-  const { sha } = commitSchema.parse(await refResponse.json())
+  const {
+    sha,
+    commit: {
+      committer: { date: repositoryDate },
+    },
+  } = commitSchema.parse(await refResponse.json())
 
   const readArtifact = async (path: string): Promise<Uint8Array> => {
     const response = await fetch(`https://raw.githubusercontent.com/${REPOSITORY}/${sha}/${path}`, {
@@ -118,11 +127,30 @@ export const getChallengeRepositoryData = cache(async () => {
     )
   ).flat()
 
+  // --- RISC-V CSP track (optional) --------------------------------------------------------------
+  const readJson = async (path: string | undefined) => {
+    const text = path === undefined ? null : await readOptional(path)
+    return text === null ? null : (JSON.parse(text) as unknown)
+  }
+  const [cspBenchmark, cspFixtureRaw] = await Promise.all([
+    readJson(sources.riscvCspBenchmark),
+    readJson(sources.riscvCspFixture),
+  ])
+  const csp =
+    cspBenchmark === null || cspFixtureRaw === null
+      ? null
+      : {
+          contract: cspContractSchema.parse(cspBenchmark),
+          fixture: cspFixtureSchema.parse(cspFixtureRaw),
+        }
+
   return {
     ...parsed,
     scorecards,
     proofResearch,
+    csp,
     repositoryCommit: sha,
+    repositoryDate,
     proofContract,
     proofFixture,
     proofObservations,

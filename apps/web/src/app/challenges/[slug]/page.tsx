@@ -69,7 +69,7 @@ export default async function ChallengePage({ params }: Props) {
         summary={summary}
         candidates={candidates}
         firstProof={firstProofTimes(proofProgress)}
-        progress={cairoProgress(candidates, history)}
+        progress={cairoProgress(candidates, history, challenge.focus.family)}
       />
       <Container className="pb-24">
         <ChallengeBoard
@@ -78,6 +78,7 @@ export default async function ChallengePage({ params }: Props) {
           tracks={challenge.tracks}
           baselineDate={challenge.contract.baselineMeasuredAt}
           history={history}
+          historyBucket={challenge.focus.family}
           proofs={<ProofTypes challenge={challenge} />}
           rankedChart={
             summary.ranked > 0 ? (

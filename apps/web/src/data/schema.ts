@@ -25,10 +25,11 @@ export const stepSchema = z.object({
 export const faqSchema = z.object({ question: z.string(), answer: z.string() })
 
 export const trackIdSchema = z.enum(["latency", "memory", "balanced"])
-export const familyIdSchema = z.enum(["pie", "recursion", "pipeline"])
-export const stageIdSchema = z.enum(["cairo", "wrap", "fold"])
+/** Case families and proof stages are authored per challenge (e.g. pie, sha256; cairo, prove). */
+export const familyIdSchema = z.string().regex(/^[a-z0-9_]+$/)
+export const stageIdSchema = z.string().regex(/^[a-z0-9_]+$/)
 
-/** One kind of proof the challenge times: a Cairo proof, a wrap, or a fold. */
+/** One kind of proof work the challenge times: a Cairo proof, a wrap, guest execution, … */
 export const stageSchema = z.object({
   id: stageIdSchema,
   name: z.string(),
@@ -89,6 +90,11 @@ export const caseMeasuredSchema = z.object({
   osSteps: z.number().int().positive().optional(),
   leaves: z.number().int().positive().optional(),
   mode: z.enum(["serial", "batch_integrated"]).optional(),
+  /** Guest input size and unit, for input-sized workloads (e.g. 128 bytes). */
+  inputSize: z.number().int().positive().optional(),
+  inputUnit: z.string().optional(),
+  /** Expected guest execution cycles, where the fixture pins them. */
+  cycles: z.number().int().positive().optional(),
   /**
    * Unranked direct H200 reference measurements. The active contract scores whole-command
    * time and whole-device peak from fresh paired judge runs; proof and arena are diagnostics.
@@ -142,14 +148,14 @@ export const contractImportedSchema = z.object({
   hardware: z.object({
     /** Host label, e.g. "NVIDIA H200 SXM" or "Apple M5 Max 64 GB". */
     gpu: z.string(),
-    /** Device, unified, or system memory available to the prover. */
-    deviceBytes: z.number().positive(),
+    /** Device, unified, or system memory available to the prover, when the contract states it. */
+    deviceBytes: z.number().positive().optional(),
     reserveBytes: z.number().positive().optional(),
   }),
   security: z.object({
     friQueries: z.number().int(),
     queryPowBits: z.number().int(),
-    interactionPowBits: z.number().int(),
+    interactionPowBits: z.number().int().optional(),
     preprocessedVariant: z.string(),
   }),
 })
@@ -169,14 +175,25 @@ export const contractContentSchema = z.object({
 })
 
 const challengeBase = {
+  /** Which data adapter feeds this challenge. */
+  kind: z.enum(["stwo-proof", "riscv-csp"]),
+  /** The challenge family's display name, shared by its backend routes (e.g. "RISC-V CSP"). */
+  group: z.string(),
+  /** The family the headline figures lead with, and its singular label ("Cairo proof"). */
+  focus: z.object({ family: familyIdSchema, label: z.string() }),
+  /**
+   * Agent prompt template; {name}, {backend}, {BACKEND}, {host}, {repositoryUrl} and {repo}
+   * are filled per route.
+   */
+  agentPrompt: z.string().min(1),
   slug: z.string().regex(/^[a-z0-9-]+$/),
   name: z.string(),
   headline: z.string(),
   status: z.enum(["live", "staging", "closed"]),
   summary: z.string(),
   tracks: z.array(trackSchema).min(1),
-  stages: z.array(stageSchema).length(3),
-  families: z.array(familySchema).length(3),
+  stages: z.array(stageSchema).min(1),
+  families: z.array(familySchema).min(1),
   tiers: z.array(tierSchema).min(1),
   gates: z.array(gateSchema),
   participate: z.array(stepSchema).min(1),

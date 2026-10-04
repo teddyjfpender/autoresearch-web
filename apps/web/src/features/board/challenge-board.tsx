@@ -26,6 +26,7 @@ export function ChallengeBoard({
   tracks,
   baselineDate,
   history,
+  historyBucket,
   rankedChart,
   discussion,
   details,
@@ -38,6 +39,8 @@ export function ChallengeBoard({
   baselineDate: string
   /** Modeled milestones before the baseline, for the Cairo tab of the chart. */
   history: readonly HistoryMilestone[]
+  /** The job tab the pre-baseline history belongs to. */
+  historyBucket: BucketId
   /** The "what is being proved" panel. */
   proofs: ReactNode
   /** Signed-score chart, shown instead of the candidate chart once anything is ranked. */
@@ -119,6 +122,7 @@ export function ChallengeBoard({
               onSelect={select}
               baselineDate={baselineDate}
               history={history}
+              historyBucket={historyBucket}
             />
           )}
           {candidates.length === 0 ? (

@@ -11,7 +11,13 @@ import { useMemo } from "react"
 import { Formula } from "@autoresearch/ui/components/formula"
 
 import type { Family, Track } from "@/data/schema"
-import { REVIEW_STATE_LABEL, scoreFor, type BucketId, type Candidate } from "@/lib/candidates"
+import {
+  REVIEW_STATE_LABEL,
+  ratiosFor,
+  scoreFor,
+  type BucketId,
+  type Candidate,
+} from "@/lib/candidates"
 import { formatSeconds } from "@/lib/format"
 
 import { RatioCell } from "../scorecard/ratio-cell"
@@ -157,9 +163,12 @@ export function CandidateTable({
                   </Badge>
                 </span>
                 <span className="hidden text-right font-mono text-xs text-fg-muted tabular sm:block">
-                  {candidate.buckets[bucket] === null
-                    ? "—"
-                    : `${formatNumber(candidate.buckets[bucket].rTime, 3)} · ${formatNumber(candidate.buckets[bucket].rMemory, 3)}`}
+                  {(() => {
+                    const ratios = ratiosFor(candidate, bucket)
+                    return ratios === null
+                      ? "—"
+                      : `${formatNumber(ratios.rTime, 3)} · ${formatNumber(ratios.rMemory, 3)}`
+                  })()}
                 </span>
                 <span className="text-right font-mono text-sm text-fg tabular">
                   {fmt(scoreFor(candidate, track, bucket))}

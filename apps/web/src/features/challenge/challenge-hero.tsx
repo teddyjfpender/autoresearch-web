@@ -8,7 +8,13 @@ import { ChevronRight } from "lucide-react"
 
 import type { Challenge } from "@/data/schema"
 import { formatSeconds } from "@/lib/format"
-import { scoreFor, type CairoProgress, type Candidate, type FirstProof } from "@/lib/candidates"
+import {
+  ratiosFor,
+  scoreFor,
+  type CairoProgress,
+  type Candidate,
+  type FirstProof,
+} from "@/lib/candidates"
 import { routes } from "@/lib/routes"
 import type { Summary } from "@/lib/scoring"
 
@@ -38,17 +44,20 @@ export function ChallengeHero({
     values.length === 0
       ? "—"
       : `${formatNumber(Math.min(...values), 2)}–${formatSeconds(Math.max(...values))}`
-  const best = (bucket: "basket" | "pie") =>
+  const focus = challenge.focus
+  const familyName =
+    challenge.families.find((family) => family.id === focus.family)?.name ?? focus.label
+  const best = (bucket: string) =>
     candidates
-      .filter((candidate) => candidate.buckets[bucket] !== null)
+      .filter((candidate) => ratiosFor(candidate, bucket) !== null)
       .toSorted(
         (a, b) => (scoreFor(b, "latency", bucket) ?? 0) - (scoreFor(a, "latency", bucket) ?? 0),
       )[0]
   const basketLeader = best("basket")
-  const cairoLeader = best("pie")
-  const cairoCases = cairoLeader?.cases.filter((item) => item.family === "pie") ?? []
+  const cairoLeader = best(focus.family)
+  const cairoCases = cairoLeader?.cases.filter((item) => item.family === focus.family) ?? []
   const baselineCairo = challenge.cases.flatMap((testCase) =>
-    testCase.family === "pie" && testCase.baseline.proofTimeS !== null
+    testCase.family === focus.family && testCase.baseline.proofTimeS !== null
       ? [testCase.baseline.proofTimeS]
       : [],
   )
@@ -69,7 +78,7 @@ export function ChallengeHero({
   })
   const wasLabel = firstProof === null ? "at baseline" : `at ${firstProof.milestone}`
   const proved = challenge.cases.filter((testCase) => testCase.baseline.rounds > 0).length
-  const speedup = (candidate: Candidate | undefined, bucket: "basket" | "pie") =>
+  const speedup = (candidate: Candidate | undefined, bucket: string) =>
     candidate === undefined
       ? "—"
       : `${formatNumber(scoreFor(candidate, "latency", bucket) ?? 1, 3)}×`
@@ -96,24 +105,24 @@ export function ChallengeHero({
             },
             progress
               ? {
-                  label: "Total Cairo improvement",
+                  label: `Total ${focus.label} improvement`,
                   value: `${formatNumber(progress.speedup, 1)}×`,
                   hint: `${String(Math.round(progress.reduction * 100))}% less proof time since ${progress.since}`,
                 }
               : {
-                  label: "Best Cairo proof speedup",
-                  value: speedup(cairoLeader, "pie"),
+                  label: `Best ${focus.label} speedup`,
+                  value: speedup(cairoLeader, focus.family),
                   ...(cairoLeader
-                    ? { hint: `PR #${String(cairoLeader.prNumber)} · Cairo proofs` }
+                    ? { hint: `PR #${String(cairoLeader.prNumber)} · ${familyName}` }
                     : {}),
                 },
             cairoAgainstBaseline.length > 0
               ? {
-                  label: "Cairo proof time",
+                  label: `${focus.label} time`,
                   value: seconds(cairoAgainstBaseline.map((item) => item.candidate)),
                   hint: `was ${seconds(cairoAgainstBaseline.map((item) => item.was))} ${wasLabel}`,
                 }
-              : { label: "Cairo proof time", value: seconds(baselineCairo), hint: "baseline" },
+              : { label: `${focus.label} time`, value: seconds(baselineCairo), hint: "baseline" },
             {
               label: "Activation",
               value: `${String(gatesDone)} / ${String(challenge.gates.length)}`,
@@ -127,7 +136,7 @@ export function ChallengeHero({
               hint: challenge.contract.hardware.gpu,
             },
             {
-              label: "Cairo proof time",
+              label: `${focus.label} time`,
               value: seconds(baselineCairo),
               hint:
                 baselineCairo.length === 0

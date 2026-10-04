@@ -1,0 +1,265 @@
+{
+  "kind": "riscv-csp",
+  "group": "RISC-V CSP",
+  "focus": {
+    "family": "sha256",
+    "label": "SHA-256 proof"
+  },
+  "agentPrompt": "Find the largest optimisation that improves the benchmarks in this challenge: {name}, cutting full RISC-V guest proof time on the {BACKEND} backend ({host}).\n{repositoryUrl}\n\nClone the challenge repository and work from its root. Read TASK.md, AGENTS.md and spec/RISCV_CSP.md before editing. The suite is 16 canonical client-side-proving guests: five SHA-256 messages, five Keccak-256 messages, five Poseidon2-M31 inputs and one secp256k1 ECDSA signature through the typed, proved precompile. The metric is the CSP report's proof_duration (guest execution, witness construction and proof generation); verification is mandatory but timed separately. Each of the four targets carries a quarter of the log weight. Results are unranked same-host research.\n\nStart with:\ngit clone {repositoryUrl}.git\ncd {repo}\npython3 challenge.py setup-csp --backend {backend} --build-baseline\npython3 challenge.py paths-csp --backend {backend}\n\nEdit only the {backend} editable paths under workspace/csp-source. The suite manifests, guest binaries, inputs, benchmark script, security settings (BLAKE3, 70 FRI queries, 26 PoW bits, no recursion) and verifier are protected. Commit source changes inside that checkout, then rebuild with python3 challenge.py setup-csp --backend {backend} --build.\n\nProfile first and go after the biggest prover bottleneck you can find. Smoke one target before the full suite:\npython3 challenge.py benchmark-csp --backend {backend} --case sha256:128 --out .runs/csp/candidate-smoke.json\nThen run complete baseline and candidate reports on an otherwise idle host and compare them with python3 challenge.py compare-csp --backend {backend}.\n\nWhen ready, run python3 challenge.py capture-csp --backend {backend}. Open a PR with candidate/riscv-csp-changes.patch and a note covering the candidate commit, changed paths, mechanism, verification, per-target proof durations, memory, the negative-case result, regressions and host conditions. Link relevant GitHub Discussions. No API key is needed to start.",
+  "contract": {
+    "epoch": "riscv-csp-v1",
+    "draft": true,
+    "timeScope": "The CSP report's proof_duration: guest execution, witness construction and proof generation for the whole RISC-V guest. Verification is mandatory but timed separately; loading, building and command wall time are diagnostics.",
+    "memoryScope": "Peak physical footprint is reported for capacity and diagnostics only; it is never part of the score.",
+    "minImprovement": 0.01,
+    "pairedRounds": 1,
+    "bootstrapResamples": 2000
+  },
+  "tracks": [
+    {
+      "id": "latency",
+      "name": "Proof time",
+      "objective": "Fastest full-guest proofs across the SHA-256, Keccak, Poseidon2-M31 and ECDSA targets.",
+      "formula": "1 / R_T",
+      "guards": [],
+      "why": "Client-side proving is bounded by how long a phone or laptop takes to prove the whole guest program."
+    }
+  ],
+  "families": [
+    {
+      "id": "sha256",
+      "name": "SHA-256",
+      "description": "Five messages from 128 B to 2 KiB, hashed in software inside the RISC-V guest. A canonical CSP zkVM workload.",
+      "explainer": "A full zkVM proof that a RISC-V guest computed the SHA-256 digest of a message. The prover executes the guest, builds the witness for every instruction it ran and proves the whole execution with Stwo. Proof time grows with the number of cycles the guest needs.",
+      "inputs": "A length-prefixed message from the CSP benchmarks' seeded generator, 128 B to 2,048 B. The guest binary, input bytes and expected digest are hash-pinned in the challenge fixture."
+    },
+    {
+      "id": "keccak",
+      "name": "Keccak-256",
+      "description": "Five messages from 128 B to 2 KiB, hashed with Ethereum's Keccak-256 inside the guest. A canonical CSP zkVM workload.",
+      "explainer": "The same full-guest proof for Keccak-256, Ethereum's hash. Its 64-bit permutation is expensive on a 32-bit RISC-V guest, so each byte costs more cycles than SHA-256 and the proof grows faster with input size.",
+      "inputs": "The same seeded, length-prefixed messages as SHA-256, 128 B to 2,048 B, with hash-pinned guest, inputs and expected digests."
+    },
+    {
+      "id": "poseidon2_m31",
+      "name": "Poseidon2-M31",
+      "description": "Five inputs of 2 to 16 Mersenne-31 field elements. A field-native extension, not EthProofs' BN254 Poseidon2 case.",
+      "explainer": "A full-guest proof of Poseidon2 over the Mersenne-31 field Stwo itself works in. It is a field-native extension of the CSP suite, not the BN254 Poseidon2 workload on EthProofs, so it is compared only against itself.",
+      "inputs": "A count-prefixed list of 2 to 16 M31 field elements from the CSP generator. The guest outputs the eight-element Poseidon2 state."
+    },
+    {
+      "id": "ecdsa_secp256k1",
+      "name": "ECDSA secp256k1",
+      "description": "One secp256k1 signature, verified through a typed, proved precompile; a pinned invalid signature must fail.",
+      "explainer": "A full-guest proof that a secp256k1 signature is valid, the check behind every Ethereum transaction. The guest calls a typed ECDSA precompile whose work is proved alongside the guest; an invalid or unsupported signature must take the proved software fallback.",
+      "inputs": "A 32-byte digest, a SEC1 public key and a signature from the CSP generator. The suite also proves a pinned invalid-signature fixture and checks it is rejected."
+    }
+  ],
+  "cases": [
+    {
+      "id": "sha256:128",
+      "title": "SHA-256 · 128 B",
+      "description": "Hashes a 128-byte message with SHA-256 inside the guest and outputs the 32-byte digest.",
+      "stages": ["execute", "witness", "prove"]
+    },
+    {
+      "id": "sha256:256",
+      "title": "SHA-256 · 256 B",
+      "description": "Hashes a 256-byte message with SHA-256 inside the guest and outputs the 32-byte digest.",
+      "stages": ["execute", "witness", "prove"]
+    },
+    {
+      "id": "sha256:512",
+      "title": "SHA-256 · 512 B",
+      "description": "Hashes a 512-byte message with SHA-256 inside the guest and outputs the 32-byte digest.",
+      "stages": ["execute", "witness", "prove"]
+    },
+    {
+      "id": "sha256:1024",
+      "title": "SHA-256 · 1,024 B",
+      "description": "Hashes a 1,024-byte message with SHA-256 inside the guest and outputs the 32-byte digest.",
+      "stages": ["execute", "witness", "prove"]
+    },
+    {
+      "id": "sha256:2048",
+      "title": "SHA-256 · 2,048 B",
+      "description": "Hashes a 2,048-byte message with SHA-256 inside the guest and outputs the 32-byte digest.",
+      "stages": ["execute", "witness", "prove"]
+    },
+    {
+      "id": "keccak:128",
+      "title": "Keccak-256 · 128 B",
+      "description": "Hashes a 128-byte message with Keccak-256 inside the guest and outputs the 32-byte digest.",
+      "stages": ["execute", "witness", "prove"]
+    },
+    {
+      "id": "keccak:256",
+      "title": "Keccak-256 · 256 B",
+      "description": "Hashes a 256-byte message with Keccak-256 inside the guest and outputs the 32-byte digest.",
+      "stages": ["execute", "witness", "prove"]
+    },
+    {
+      "id": "keccak:512",
+      "title": "Keccak-256 · 512 B",
+      "description": "Hashes a 512-byte message with Keccak-256 inside the guest and outputs the 32-byte digest.",
+      "stages": ["execute", "witness", "prove"]
+    },
+    {
+      "id": "keccak:1024",
+      "title": "Keccak-256 · 1,024 B",
+      "description": "Hashes a 1,024-byte message with Keccak-256 inside the guest and outputs the 32-byte digest.",
+      "stages": ["execute", "witness", "prove"]
+    },
+    {
+      "id": "keccak:2048",
+      "title": "Keccak-256 · 2,048 B",
+      "description": "Hashes a 2,048-byte message with Keccak-256 inside the guest and outputs the 32-byte digest.",
+      "stages": ["execute", "witness", "prove"]
+    },
+    {
+      "id": "poseidon2_m31:2",
+      "title": "Poseidon2-M31 · 2 elements",
+      "description": "Hashes 2 M31 field elements with Poseidon2 and outputs the eight-element state.",
+      "stages": ["execute", "witness", "prove"]
+    },
+    {
+      "id": "poseidon2_m31:4",
+      "title": "Poseidon2-M31 · 4 elements",
+      "description": "Hashes 4 M31 field elements with Poseidon2 and outputs the eight-element state.",
+      "stages": ["execute", "witness", "prove"]
+    },
+    {
+      "id": "poseidon2_m31:8",
+      "title": "Poseidon2-M31 · 8 elements",
+      "description": "Hashes 8 M31 field elements with Poseidon2 and outputs the eight-element state.",
+      "stages": ["execute", "witness", "prove"]
+    },
+    {
+      "id": "poseidon2_m31:12",
+      "title": "Poseidon2-M31 · 12 elements",
+      "description": "Hashes 12 M31 field elements with Poseidon2 and outputs the eight-element state.",
+      "stages": ["execute", "witness", "prove"]
+    },
+    {
+      "id": "poseidon2_m31:16",
+      "title": "Poseidon2-M31 · 16 elements",
+      "description": "Hashes 16 M31 field elements with Poseidon2 and outputs the eight-element state.",
+      "stages": ["execute", "witness", "prove"]
+    },
+    {
+      "id": "ecdsa_secp256k1:32",
+      "title": "ECDSA secp256k1 · one signature",
+      "description": "Verifies one secp256k1 signature over a 32-byte digest through the typed, proved ECDSA precompile, and outputs the digest.",
+      "stages": ["execute", "witness", "prove"]
+    }
+  ],
+  "tiers": [
+    {
+      "id": "intake",
+      "name": "Intake",
+      "gpu": false,
+      "description": "The patch is checked against the immutable source pin and the backend's edit surface without running candidate code."
+    },
+    {
+      "id": "smoke",
+      "name": "Smoke",
+      "gpu": true,
+      "description": "One target and size on the M5 Max, with full verification, to reject weak ideas quickly."
+    },
+    {
+      "id": "qualify",
+      "name": "Qualify",
+      "gpu": true,
+      "description": "All 16 cases plus the negative fixture, with execution counts, statements, proofs, outputs and backend identity checked."
+    },
+    {
+      "id": "rank",
+      "name": "Rank",
+      "gpu": true,
+      "description": "Fresh paired baseline and candidate runs on an idle host. Not yet activated; results are unranked research."
+    }
+  ],
+  "participate": [
+    {
+      "title": "Set up the CSP checkouts",
+      "body": "Creates the clean baseline and the editable source for this backend at the pinned stwo-zig commit, and builds both.",
+      "command": "python3 challenge.py setup-csp --backend {backend} --build-baseline"
+    },
+    {
+      "title": "Edit and commit",
+      "body": "Change only this backend's editable paths in workspace/csp-source, commit inside that checkout, then rebuild the candidate.",
+      "command": "python3 challenge.py setup-csp --backend {backend} --build"
+    },
+    {
+      "title": "Compare on one host",
+      "body": "Run complete baseline and candidate reports on an idle machine and compare them per target.",
+      "command": "python3 challenge.py compare-csp --backend {backend} --baseline .runs/csp/baseline.json --candidate .runs/csp/candidate.json --out .runs/csp/comparison.json"
+    },
+    {
+      "title": "Capture the patch",
+      "body": "Writes candidate/riscv-csp-changes.patch, checked against the source pin and edit surface.",
+      "command": "python3 challenge.py capture-csp --backend {backend}"
+    }
+  ],
+  "rules": [
+    "Only proof_duration is timed: guest execution, witness construction and proof generation for the whole guest.",
+    "Every case must reproduce its expected execution count and output and pass mandatory verification.",
+    "The invalid-signature fixture must still be proved and rejected.",
+    "Suite manifests, guest binaries, inputs, security settings and the verifier are protected.",
+    "Each backend is compared only against its own baseline on the same host.",
+    "These are same-host research comparisons, not official EthProofs ranks."
+  ],
+  "links": {
+    "repo": "https://github.com/teddyjfpender/stwo-cuda-challenge",
+    "discussions": "https://github.com/teddyjfpender/stwo-cuda-challenge/discussions",
+    "prover": "https://github.com/teddyjfpender/stwo-zig"
+  },
+  "stages": [
+    {
+      "id": "execute",
+      "name": "Guest execution",
+      "summary": "Runs the RISC-V guest on its input and records every instruction it executes.",
+      "input": "Guest ELF + input",
+      "output": "Execution trace",
+      "baselineTimed": true,
+      "explainer": "The RISC-V guest runs instruction by instruction on its input, recording every cycle.",
+      "inputs": "A hash-pinned guest binary and input bytes."
+    },
+    {
+      "id": "witness",
+      "name": "Witness construction",
+      "summary": "Turns the execution into the trace columns the RISC-V AIR constrains.",
+      "input": "Execution trace",
+      "output": "Witness",
+      "baselineTimed": true,
+      "explainer": "The execution is laid out as trace columns for the RISC-V AIR and any precompile it called.",
+      "inputs": "The recorded execution."
+    },
+    {
+      "id": "prove",
+      "name": "Proof generation",
+      "summary": "Commits to the witness and proves it with Stwo: BLAKE3, 70 FRI queries, 26 PoW bits, no recursion.",
+      "input": "Witness",
+      "output": "Guest proof",
+      "baselineTimed": true,
+      "explainer": "Stwo commits to the witness and produces one STARK proof of the whole execution.",
+      "inputs": "The witness columns."
+    }
+  ],
+  "backends": [
+    {
+      "id": "cpu",
+      "slug": "riscv-csp-cpu",
+      "name": "RISC-V CSP CPU",
+      "headline": "Prove canonical client-side workloads faster on the CPU.",
+      "summary": "Full RISC-V guest proofs of the EthProofs client-side-proving suite (SHA-256, Keccak, Poseidon2-M31 and ECDSA) on the CPU of an M5 Max. Only proof_duration is scored, against the CPU's own baseline."
+    },
+    {
+      "id": "metal",
+      "slug": "riscv-csp-metal",
+      "name": "RISC-V CSP Metal",
+      "headline": "Prove canonical client-side workloads faster on Metal.",
+      "summary": "The same 16 full-guest proofs on the Metal backend of an M5 Max: SHA-256, Keccak, Poseidon2-M31 and ECDSA. Only proof_duration is scored, against Metal's own baseline."
+    }
+  ]
+}

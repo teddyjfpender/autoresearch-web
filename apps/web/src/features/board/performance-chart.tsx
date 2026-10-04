@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react"
 
 import type { Track, TrackId } from "@/data/schema"
 import {
+  ratiosFor,
   allDated,
   chronological,
   paretoIds,
@@ -125,6 +126,7 @@ export function PerformanceChart({
   onSelect,
   baselineDate,
   history,
+  historyBucket,
 }: {
   candidates: readonly Candidate[]
   tracks: readonly Track[]
@@ -139,6 +141,7 @@ export function PerformanceChart({
   baselineDate: string
   /** Modeled milestones before the baseline, shown on the Cairo tab. */
   history: readonly HistoryMilestone[]
+  historyBucket: BucketId
 }) {
   const [hover, setHover] = useState<number | null>(null)
   const [containerRef, width] = useWidth<HTMLDivElement>()
@@ -150,13 +153,13 @@ export function PerformanceChart({
   const model = useMemo<Model>(() => {
     if (mode === "pareto") {
       const frontier = paretoIds(candidates, bucket)
-      const measured = candidates.filter((candidate) => candidate.buckets[bucket] !== null)
-      const xs = [1, ...measured.map((candidate) => candidate.buckets[bucket]?.rMemory ?? 1)]
-      const ys = [1, ...measured.map((candidate) => candidate.buckets[bucket]?.rTime ?? 1)]
+      const measured = candidates.filter((candidate) => ratiosFor(candidate, bucket) !== null)
+      const xs = [1, ...measured.map((candidate) => ratiosFor(candidate, bucket)?.rMemory ?? 1)]
+      const ys = [1, ...measured.map((candidate) => ratiosFor(candidate, bucket)?.rTime ?? 1)]
       const x = createScale("lin", ratioDomain(xs), [0, innerWidth])
       const y = createScale("lin", ratioDomain(ys), [innerHeight, 0])
       const points: Point[] = measured.map((candidate) => {
-        const ratios = candidate.buckets[bucket]
+        const ratios = ratiosFor(candidate, bucket)
         return {
           candidate,
           px: x(ratios?.rMemory ?? 1),
@@ -198,7 +201,7 @@ export function PerformanceChart({
     }
 
     const trackId = track?.id ?? "latency"
-    const shownHistory = bucket === "pie" ? history : []
+    const shownHistory = bucket === historyBucket ? history : []
     const ordered = chronological(candidates)
     const timed = allDated(ordered)
 
@@ -308,7 +311,17 @@ export function PerformanceChart({
       y: scale,
       timed,
     }
-  }, [candidates, mode, bucket, innerWidth, innerHeight, baselineDate, history, track])
+  }, [
+    candidates,
+    mode,
+    bucket,
+    innerWidth,
+    innerHeight,
+    baselineDate,
+    history,
+    historyBucket,
+    track,
+  ])
 
   const onMove = (event: PointerEvent<SVGRectElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -331,7 +344,7 @@ export function PerformanceChart({
 
   const hovered = model.points.find((point) => point.candidate.prNumber === hover)
   const bucketLabel = buckets.find((item) => item.value === bucket)?.label ?? ""
-  const hoveredRatios = hovered ? hovered.candidate.buckets[bucket] : null
+  const hoveredRatios = hovered ? ratiosFor(hovered.candidate, bucket) : null
   const hoveredScore = hovered
     ? scoreFor(hovered.candidate, mode === "pareto" ? (track?.id ?? "latency") : mode, bucket)
     : null
@@ -341,7 +354,7 @@ export function PerformanceChart({
       : model.history[0] === undefined
         ? `${track?.name ?? ""} speedup · ${track?.formula ?? ""}`
         : `${track?.name ?? ""} speedup since ${model.history[0].milestone.label}`
-  const empty = candidates.every((candidate) => candidate.buckets[bucket] === null)
+  const empty = candidates.every((candidate) => ratiosFor(candidate, bucket) === null)
 
   return (
     <figure className="rounded-2xl border border-line p-4 sm:p-6">

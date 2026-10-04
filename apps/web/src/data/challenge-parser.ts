@@ -32,6 +32,9 @@ export const challengeSourceManifestSchema = z.object({
   proofObservations: z.array(sourcePath).optional(),
   /** Per-backend PR research tables (reported proof-stage times, unranked). */
   proofResearchObservations: z.array(sourcePath).optional(),
+  /** RISC-V CSP full-guest track. */
+  riscvCspBenchmark: sourcePath.optional(),
+  riscvCspFixture: sourcePath.optional(),
 })
 export type ChallengeSourceManifest = z.infer<typeof challengeSourceManifestSchema>
 

@@ -17,6 +17,9 @@ import { StatusBadge } from "../challenge/status-badge"
 import { SectionLink } from "../site/section-link"
 import { Sparkline } from "./sparkline"
 
+const formatCycles = (cycles: number) =>
+  cycles >= 1e6 ? `${formatNumber(cycles / 1e6, 2)}M` : `${formatNumber(cycles / 1e3, 0)}K`
+
 export interface ShowcaseEntry {
   challenge: Challenge
   scorecards: readonly Scorecard[]
@@ -25,11 +28,14 @@ export interface ShowcaseEntry {
 }
 
 /** The figure a card leads with: proof time removed, from the strongest evidence available. */
-function improvement({ progress, highlight }: ShowcaseEntry): { value: number; label: string } {
+function improvement({ challenge, progress, highlight }: ShowcaseEntry): {
+  value: number
+  label: string
+} {
   if (progress)
     return {
       value: progress.reduction * 100,
-      label: `less Cairo proof time since ${progress.since}`,
+      label: `less ${challenge.focus.label} time since ${progress.since}`,
     }
   if (highlight)
     return {
@@ -44,8 +50,9 @@ function ChallengeCard(entry: ShowcaseEntry) {
   const lead = improvement(entry)
   const summary = summarize(challenge, scorecards)
   const ranked = summary.ranked > 0
+  const { focus } = challenge
   const cairoTimes = challenge.cases.flatMap((testCase) =>
-    testCase.family === "pie" && testCase.baseline.proofTimeS !== null
+    testCase.family === focus.family && testCase.baseline.proofTimeS !== null
       ? [testCase.baseline.proofTimeS]
       : [],
   )
@@ -58,12 +65,13 @@ function ChallengeCard(entry: ShowcaseEntry) {
     : [
         { label: "Public cases", value: formatNumber(challenge.cases.length) },
         {
-          label: "Fastest direct Cairo proof",
+          label: `Fastest ${focus.label}`,
           value: cairoTimes.length === 0 ? "Pending" : formatSeconds(Math.min(...cairoTimes)),
         },
         { label: "Ranked", value: "0" },
       ]
-  // Cairo proofs when this host has them, otherwise whichever jobs it has proved so far.
+  // The focus family's baseline when this host has it, else whichever jobs it has proved, else
+  // (before any baseline) the pinned workload itself: guest cycles per target.
   const proved = challenge.cases.flatMap((testCase) =>
     testCase.baseline.proofTimeS === null
       ? []
@@ -71,14 +79,29 @@ function ChallengeCard(entry: ShowcaseEntry) {
           {
             id: testCase.id,
             family: testCase.family,
-            title: testCase.title,
-            seconds: testCase.baseline.proofTimeS,
+            label: testCase.title,
+            value: testCase.baseline.proofTimeS,
+            display: formatSeconds(testCase.baseline.proofTimeS),
           },
         ],
   )
-  const cairoOnly = proved.some((testCase) => testCase.family === "pie")
-  const bars = cairoOnly ? proved.filter((testCase) => testCase.family === "pie") : proved
-  const slowest = Math.max(...bars.map((testCase) => testCase.seconds))
+  const focused = proved.filter((testCase) => testCase.family === focus.family)
+  const cycles = challenge.families.flatMap((family) => {
+    const counts = challenge.cases.flatMap((testCase) =>
+      testCase.family === family.id && testCase.cycles !== undefined ? [testCase.cycles] : [],
+    )
+    if (counts.length === 0) return []
+    const most = Math.max(...counts)
+    return [{ id: family.id, label: family.name, value: most, display: formatCycles(most) }]
+  })
+  const panel =
+    focused.length > 0
+      ? { title: `Direct ${focus.label} baseline`, rows: focused }
+      : proved.length > 0
+        ? { title: "Direct proof baseline", rows: proved }
+        : { title: "Guest cycles · largest input", rows: cycles }
+  const bars = panel.rows
+  const slowest = Math.max(...bars.map((row) => row.value))
   return (
     <Spotlight className="group/card h-full">
       <SectionLink
@@ -135,30 +158,27 @@ function ChallengeCard(entry: ShowcaseEntry) {
             <>
               <div className="flex items-center justify-between gap-4 text-label">
                 <span>
-                  {cairoOnly ? "Direct Cairo proof stage" : "Direct proof stage"} ·{" "}
-                  {challenge.contract.hardware.gpu}
+                  {panel.title} · {challenge.contract.hardware.gpu}
                 </span>
-                <span className="text-fg-muted">baseline</span>
+                <span className="text-fg-muted">{proved.length > 0 ? "baseline" : "pinned"}</span>
               </div>
               {bars.length === 0 ? (
                 <p className="text-sm text-fg-faint">No proof jobs measured on this host yet.</p>
               ) : null}
               <ul className="space-y-2">
-                {bars.map((testCase) => (
+                {bars.map((row) => (
                   <li
-                    key={testCase.id}
+                    key={row.id}
                     className="grid grid-cols-[7.5rem_1fr_3.5rem] items-center gap-3 text-xs"
                   >
-                    <span className="truncate text-fg-muted">{testCase.title}</span>
+                    <span className="truncate text-fg-muted">{row.label}</span>
                     <span aria-hidden className="relative h-1.5 rounded-full bg-surface">
                       <span
                         className="absolute inset-y-0 left-0 rounded-full bg-accent"
-                        style={{ width: `${String((testCase.seconds / slowest) * 100)}%` }}
+                        style={{ width: `${String((row.value / slowest) * 100)}%` }}
                       />
                     </span>
-                    <span className="text-right font-mono text-fg tabular">
-                      {formatSeconds(testCase.seconds)}
-                    </span>
+                    <span className="text-right font-mono text-fg tabular">{row.display}</span>
                   </li>
                 ))}
               </ul>
