@@ -298,8 +298,9 @@ export const researchCaseSchema = z.object({
   candidateProofS: z.number().positive().nullable(),
   baselineIngressS: z.number().positive().nullable(),
   candidateIngressS: z.number().positive().nullable(),
-  baselinePeakGiBRounded: z.number().positive(),
-  candidatePeakGiBRounded: z.number().positive(),
+  /** Not every research table records memory; peaks are capacity context only. */
+  baselinePeakGiBRounded: z.number().positive().nullable(),
+  candidatePeakGiBRounded: z.number().positive().nullable(),
 })
 
 /** Same public PIE cases throughout the modeled history, baseline, and PR research. */

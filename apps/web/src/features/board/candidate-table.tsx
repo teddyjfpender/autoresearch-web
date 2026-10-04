@@ -39,8 +39,10 @@ function Breakout({ candidate, families }: { candidate: Candidate; families: rea
                   <span className="truncate">{row.title}</span>
                   <RatioCell ratio={row.ratio} />
                   <span className="font-mono text-xs text-fg-muted tabular sm:text-right">
-                    {formatSeconds(row.baselineS)} → {formatSeconds(row.candidateS)} ·{" "}
-                    {formatNumber(row.candidatePeakGiB)} GiB
+                    {formatSeconds(row.baselineS)} → {formatSeconds(row.candidateS)}
+                    {row.candidatePeakGiB === null
+                      ? null
+                      : ` · ${formatNumber(row.candidatePeakGiB)} GiB`}
                   </span>
                 </li>
               ))}

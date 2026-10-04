@@ -11,6 +11,8 @@ import {
   challengeContentSchema,
   challengeSchema,
   contractImportedSchema,
+  researchCaseSchema,
+  researchReviewSchema,
   siteSchema,
   type Challenge,
   type Scorecard,
@@ -41,7 +43,12 @@ function measuredFor(backend: BackendId, imported: Imported, pin: string | null)
       .parse(imported.cases)
       .map((testCase) => [testCase.id, testCase]),
   )
-  if (backend === "cuda")
+  const observed = latestObservations(imported.proofObservations, backend, pin)
+  const host = imported.proofContract?.backends[backend].host ?? "this host"
+  // CUDA keeps its historical H200 baseline until the current pin has a full isolated table.
+  const jobs = imported.proofFixture?.cases.map((item) => item.id) ?? [...v1.keys()]
+  const covered = jobs.every((id) => observed.get(id)?.isolated === true)
+  if (backend === "cuda" && !covered)
     return new Map(
       [...v1].map(([id, testCase]) => [
         id,
@@ -55,7 +62,6 @@ function measuredFor(backend: BackendId, imported: Imported, pin: string | null)
         },
       ]),
     )
-  const observed = latestObservations(imported.proofObservations, backend, pin)
   const shapes = imported.proofFixture?.cases ?? []
   return new Map(
     [...v1.values()].map((testCase) => {
@@ -83,7 +89,7 @@ function measuredFor(backend: BackendId, imported: Imported, pin: string | null)
             commandTimeS: null,
             peakBytes: observation?.peakBytes ?? null,
             rounds: observation === undefined ? 0 : 1,
-            source: "M5 Max direct observation",
+            source: `${host} direct observation`,
           },
         }),
       ] as const
@@ -135,6 +141,7 @@ function joinChallenges(raw: unknown, imported: Imported): Challenge[] {
       .map((row) => row.observedAt ?? "")
       .toSorted()
     const host = spec?.host ?? v1.hardware.gpu
+    const historical = cases.every((testCase) => testCase.baseline.source.startsWith("Historical"))
     const contract = contractImportedSchema.parse({
       ...v1,
       backend: backend.id,
@@ -143,10 +150,9 @@ function joinChallenges(raw: unknown, imported: Imported): Challenge[] {
       sourceRepository: proof?.sourceRepository.replace(/\.git$/, "") ?? v1.sourceRepository,
       security: proof?.security ?? v1.security,
       editablePaths: spec?.editablePaths ?? v1.editablePaths,
-      baselineMeasuredAt:
-        backend.id === "cuda"
-          ? v1.baselineMeasuredAt
-          : (observedDates.at(-1) ?? v1.baselineMeasuredAt),
+      baselineMeasuredAt: historical
+        ? v1.baselineMeasuredAt
+        : (observedDates.at(-1) ?? v1.baselineMeasuredAt),
       hardware: {
         gpu: host,
         deviceBytes:
@@ -207,13 +213,70 @@ export const getScorecards = cache(async (slug: string): Promise<readonly Scorec
   )
 })
 
-export const getResearchReviews = cache(async (slug: string): Promise<readonly ResearchReview[]> =>
-  (await isCuda(slug)) ? (await getChallengeRepositoryData()).reviews : [],
+/**
+ * Per-backend PR research (e.g. Metal PR #22) in the shared review and case shapes. Only
+ * accepted research is published to these tables; it stays reported, direct and unranked.
+ */
+async function backendResearch(slug: string) {
+  const backend = (await getChallenge(slug))?.backend
+  const rows = (await getChallengeRepositoryData()).proofResearch.filter(
+    (row) => row.backend === backend,
+  )
+  const heads = [
+    ...new Map(rows.map((row) => [`${String(row.prNumber)}:${row.headSha}`, row])).values(),
+  ]
+  const reviews = heads.map((row) =>
+    researchReviewSchema.parse({
+      prNumber: row.prNumber,
+      title: `PR #${String(row.prNumber)}`,
+      headSha: row.headSha,
+      patchSha256: row.patchSha256,
+      evidenceSha256: row.patchSha256,
+      reviewState: "promoted_direct",
+      publicSamplesPerArm: row.samplesPerArm,
+      submissionId: null,
+      qualification: row.qualification,
+      validation: "Reported exact reference match on every job",
+      decision: row.note === "" ? "Accepted research frontier; unranked." : row.note,
+    }),
+  )
+  const cases = rows.map((row) =>
+    researchCaseSchema.parse({
+      prNumber: row.prNumber,
+      headSha: row.headSha,
+      patchSha256: row.patchSha256,
+      evidenceSha256: row.patchSha256,
+      caseId: row.caseId,
+      family: row.family,
+      qualification: row.qualification,
+      samplesPerArm: row.samplesPerArm,
+      timeScope: "external_command",
+      proofScope: "",
+      baselineCommandS: row.baselineCommandS ?? row.baselineProofS,
+      candidateCommandS: row.candidateCommandS ?? row.candidateProofS,
+      medianPairedCommandRatio: null,
+      baselineProofS: row.baselineProofS,
+      candidateProofS: row.candidateProofS,
+      baselineIngressS: null,
+      candidateIngressS: null,
+      baselinePeakGiBRounded: null,
+      candidatePeakGiBRounded: null,
+    }),
+  )
+  return { reviews, cases }
+}
+
+export const getResearchReviews = cache(
+  async (slug: string): Promise<readonly ResearchReview[]> => [
+    ...((await isCuda(slug)) ? (await getChallengeRepositoryData()).reviews : []),
+    ...(await backendResearch(slug)).reviews,
+  ],
 )
 
-export const getResearchCases = cache(async (slug: string): Promise<readonly ResearchCase[]> =>
-  (await isCuda(slug)) ? (await getChallengeRepositoryData()).researchCases : [],
-)
+export const getResearchCases = cache(async (slug: string): Promise<readonly ResearchCase[]> => [
+  ...((await isCuda(slug)) ? (await getChallengeRepositoryData()).researchCases : []),
+  ...(await backendResearch(slug)).cases,
+])
 
 export const getProofProgress = cache(async (slug: string): Promise<readonly ProofProgress[]> =>
   (await isCuda(slug)) ? (await getChallengeRepositoryData()).proofProgress : [],

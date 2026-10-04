@@ -146,3 +146,68 @@ export function latestObservations(
   }
   return best
 }
+
+/** One PR's reported proof-stage result on one job and backend, from a research table. */
+export interface ProofResearchRow {
+  backend: BackendId
+  caseId: string
+  family: "pie" | "recursion" | "pipeline"
+  prNumber: number
+  headSha: string
+  patchSha256: string
+  baselineProofS: number
+  candidateProofS: number
+  baselineCommandS: number | null
+  candidateCommandS: number | null
+  samplesPerArm: number
+  qualification: string
+  note: string
+}
+
+const familySchema = z.enum(["pie", "recursion", "pipeline"])
+const sha = (length: number) => new RegExp(`^[0-9a-f]{${String(length)}}$`)
+
+/**
+ * Normalize a per-backend PR research table (`m5-metal-pr22-…tsv`). Rows that did not match
+ * the reference output, or that lack either proof time, are skipped.
+ */
+export function parseProofResearch(text: string): ProofResearchRow[] {
+  return readTsv(text).flatMap((row) => {
+    const backend = backendIdSchema.safeParse(row["backend"])
+    const family = familySchema.safeParse(row["family"])
+    const prNumber = num(row["pr_number"])
+    const baselineProofS = num(row["baseline_proof_s"])
+    const candidateProofS = num(row["candidate_proof_s"])
+    const headSha = row["head_sha"] ?? ""
+    const patchSha256 = row["patch_sha256"] ?? ""
+    const match = row["reported_reference_match"] ?? row["reference_match"]
+    if (
+      !backend.success ||
+      !family.success ||
+      prNumber === null ||
+      baselineProofS === null ||
+      candidateProofS === null ||
+      !sha(40).test(headSha) ||
+      !sha(64).test(patchSha256) ||
+      (match !== undefined && match !== "true")
+    )
+      return []
+    return [
+      {
+        backend: backend.data,
+        caseId: row["case_id"] ?? "",
+        family: family.data,
+        prNumber,
+        headSha,
+        patchSha256,
+        baselineProofS,
+        candidateProofS,
+        baselineCommandS: num(row["baseline_command_s"]),
+        candidateCommandS: num(row["candidate_command_s"]),
+        samplesPerArm: num(row["samples_per_arm"]) ?? 1,
+        qualification: row["qualification"] ?? "",
+        note: row["source_note"] ?? "",
+      },
+    ]
+  })
+}

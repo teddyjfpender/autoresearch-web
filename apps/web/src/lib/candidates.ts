@@ -16,8 +16,8 @@ export interface CandidateCase {
   memoryRatio: number
   baselineS: number
   candidateS: number
-  baselinePeakGiB: number
-  candidatePeakGiB: number
+  baselinePeakGiB: number | null
+  candidatePeakGiB: number | null
 }
 
 /** A job-type slice of the basket: the whole family-weighted basket, or one family. */
@@ -94,7 +94,11 @@ export function buildCandidates(
                 title: testCase.title,
                 family: testCase.family,
                 ratio: times.candidate / times.baseline,
-                memoryRatio: row.candidatePeakGiBRounded / row.baselinePeakGiBRounded,
+                // Unrecorded memory reads as unchanged; memory is never scored.
+                memoryRatio:
+                  row.candidatePeakGiBRounded === null || row.baselinePeakGiBRounded === null
+                    ? 1
+                    : row.candidatePeakGiBRounded / row.baselinePeakGiBRounded,
                 baselineS: times.baseline,
                 candidateS: times.candidate,
                 baselinePeakGiB: row.baselinePeakGiBRounded,
@@ -130,7 +134,7 @@ export function buildCandidates(
       const pull = pulls?.find((item) => item.number === review.prNumber)
       return {
         prNumber: review.prNumber,
-        title: review.title,
+        title: pull?.title ?? review.title,
         reviewState: review.reviewState,
         decision: review.decision,
         samplesPerArm: review.publicSamplesPerArm,

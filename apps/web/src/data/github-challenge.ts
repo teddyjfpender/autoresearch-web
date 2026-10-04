@@ -6,6 +6,7 @@ import { z } from "zod"
 import { challengeSourceManifestSchema, parseChallengeFiles } from "./challenge-parser"
 import {
   parseObservations,
+  parseProofResearch,
   proofContractSchema,
   proofFixtureSchema,
   type ProofObservation,
@@ -108,9 +109,19 @@ export const getChallengeRepositoryData = cache(async () => {
     )
   ).flat()
 
+  const proofResearch = (
+    await Promise.all(
+      (sources.proofResearchObservations ?? []).map(async (path) => {
+        const text = await readOptional(path)
+        return text === null ? [] : parseProofResearch(text)
+      }),
+    )
+  ).flat()
+
   return {
     ...parsed,
     scorecards,
+    proofResearch,
     repositoryCommit: sha,
     proofContract,
     proofFixture,
