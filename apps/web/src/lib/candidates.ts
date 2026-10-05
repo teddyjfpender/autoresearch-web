@@ -68,8 +68,6 @@ const proofTimes = (row: ResearchCase) =>
     ? null
     : { baseline: row.baselineProofS, candidate: row.candidateProofS }
 
-const sum = (values: readonly number[]) => values.reduce((total, value) => total + value, 0)
-
 const geomean = (values: readonly number[]) =>
   Math.exp(values.reduce((sum, value) => sum + Math.log(value), 0) / values.length)
 
@@ -274,7 +272,7 @@ export interface HistoryMilestone {
   speedup: number
   low: number | null
   high: number | null
-  /** Summed proof seconds over the milestone's cases, with its estimate bounds when known. */
+  /** Per-job proof seconds (geometric mean over the milestone's cases), with estimate bounds. */
   totalS: number
   lowTotalS: number | null
   highTotalS: number | null
@@ -315,9 +313,9 @@ export function historyMilestones(
         // A slower bound in seconds is a lower speedup, so the ends swap.
         low: highs.length === group.length ? baseline / geomean(highs) : null,
         high: lows.length === group.length ? baseline / geomean(lows) : null,
-        totalS: sum(group.map((row) => row.proofS)),
-        lowTotalS: lows.length === group.length ? sum(lows) : null,
-        highTotalS: highs.length === group.length ? sum(highs) : null,
+        totalS: geomean(group.map((row) => row.proofS)),
+        lowTotalS: lows.length === group.length ? geomean(lows) : null,
+        highTotalS: highs.length === group.length ? geomean(highs) : null,
       }
     })
     .toSorted((a, b) => a.order - b.order)
@@ -389,18 +387,21 @@ export interface CaseBaseline {
 
 const inBucket = (family: FamilyId, bucket: BucketId) => bucket === "basket" || family === bucket
 
-/** Summed baseline proof seconds over a bucket's cases; null if any case lacks a baseline. */
+/**
+ * Baseline proof seconds per job over a bucket (geometric mean, so it reads as one job's
+ * proving time); null if any case lacks a baseline.
+ */
 export function baselineTotal(cases: readonly CaseBaseline[], bucket: BucketId): number | null {
   const members = cases.filter((item) => inBucket(item.family, bucket))
   return members.length === 0 || members.some((item) => item.seconds === null)
     ? null
-    : sum(members.map((item) => item.seconds ?? 0))
+    : geomean(members.map((item) => item.seconds ?? 0))
 }
 
 /**
- * A candidate's summed proof seconds over a bucket: each case's baseline × the candidate's
- * paired ratio, so every candidate is expressed on the same pinned baseline. Null when the
- * bucket isn't fully measured.
+ * A candidate's proof seconds per job over a bucket: the geometric mean of each case's
+ * baseline × the candidate's paired ratio, so every candidate sits on the same pinned
+ * baseline. Null when the bucket isn't fully measured.
  */
 export function candidateTotal(
   candidate: Candidate,
@@ -409,11 +410,45 @@ export function candidateTotal(
 ): number | null {
   const members = cases.filter((item) => inBucket(item.family, bucket))
   if (members.length === 0) return null
-  let total = 0
+  const seconds: number[] = []
   for (const item of members) {
     const measured = candidate.cases.find((row) => row.caseId === item.id)
     if (measured === undefined || item.seconds === null) return null
-    total += item.seconds * measured.ratio
+    seconds.push(item.seconds * measured.ratio)
   }
-  return total
+  return geomean(seconds)
+}
+
+/** A challenge's proof time per job across every job: today's best and the baseline. */
+export interface ProofTimeLead {
+  /** Best reviewed candidate's per-job proof time, else the baseline's. */
+  seconds: number
+  baselineS: number
+  prNumber: number | null
+  jobs: number
+}
+
+export function proofTimeLead(
+  challenge: Challenge,
+  candidates: readonly Candidate[],
+): ProofTimeLead | null {
+  const cases = challenge.cases.map((testCase) => ({
+    id: testCase.id,
+    family: testCase.family,
+    seconds: testCase.baseline.proofTimeS,
+  }))
+  const baselineS = baselineTotal(cases, "basket")
+  if (baselineS === null) return null
+  let best: { seconds: number; prNumber: number } | null = null
+  for (const candidate of candidates) {
+    const seconds = candidateTotal(candidate, cases, "basket")
+    if (seconds !== null && seconds < (best?.seconds ?? baselineS))
+      best = { seconds, prNumber: candidate.prNumber }
+  }
+  return {
+    seconds: best?.seconds ?? baselineS,
+    baselineS,
+    prNumber: best?.prNumber ?? null,
+    jobs: cases.length,
+  }
 }

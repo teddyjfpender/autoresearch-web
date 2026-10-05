@@ -422,7 +422,7 @@ export function PerformanceChart({
     mode === "pareto"
       ? `${METRICS.rTime.axis} (${METRICS.rTime.direction})`
       : timeView
-        ? `Total proof time · ${bucketLabel}`
+        ? `Proof time per job · ${bucketLabel}`
         : model.history[0] === undefined
           ? `${track?.name ?? ""} speedup · ${track?.formula ?? ""}`
           : `${track?.name ?? ""} speedup since ${model.history[0].milestone.label}`
@@ -440,7 +440,7 @@ export function PerformanceChart({
             {mode === "pareto"
               ? "The line joins candidates nothing beats on both axes."
               : timeView
-                ? "Lower is faster: summed proof time over this tab's jobs. The line is the best so far."
+                ? "Lower is faster: proving time per job (geometric mean over this tab's jobs). The line is the best so far."
                 : "Higher is faster. The line is the best candidate so far."}
           </p>
         </div>
@@ -777,7 +777,7 @@ export function PerformanceChart({
                   </div>
                   {hoveredTotal === null ? null : (
                     <div className="col-span-2">
-                      <dt className="text-fg-faint">Total proof time</dt>
+                      <dt className="text-fg-faint">Proof time per job</dt>
                       <dd>{formatProofTime(hoveredTotal)}</dd>
                     </div>
                   )}

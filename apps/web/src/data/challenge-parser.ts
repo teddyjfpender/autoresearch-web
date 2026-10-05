@@ -35,6 +35,8 @@ export const challengeSourceManifestSchema = z.object({
   /** RISC-V CSP full-guest track. */
   riscvCspBenchmark: sourcePath.optional(),
   riscvCspFixture: sourcePath.optional(),
+  /** Published, verified CSP proof measurements (TSV), one table per observation set. */
+  riscvCspObservations: z.array(sourcePath).optional(),
 })
 export type ChallengeSourceManifest = z.infer<typeof challengeSourceManifestSchema>
 

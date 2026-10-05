@@ -150,6 +150,12 @@ function joinCsp(content: Content, imported: Imported): Challenge[] {
   return content.backends.flatMap((backend) => {
     const spec = csp.contract.backends[backend.id]
     if (spec === undefined) return []
+    // Only measurements of the pinned source on this backend count as its baseline; the
+    // latest observation set wins.
+    const observed = csp.observations
+      .filter((row) => row.backend === backend.id && row.sourceCommit === csp.contract.sourceCommit)
+      .toSorted((a, b) => (b.observedAt ?? "").localeCompare(a.observedAt ?? ""))
+    const observedAt = observed[0]?.observedAt ?? null
     const cases = content.cases.map((testCase) => {
       const [target = "", size = ""] = testCase.id.split(":")
       const shape = csp.fixture.targets[target]
@@ -165,16 +171,30 @@ function joinCsp(content: Content, imported: Imported): Challenge[] {
           inputSize: fixtureCase.input_size,
           inputUnit: shape.input_size_unit,
           cycles: fixtureCase.expected_cycles,
-          baseline: {
-            proofTimeS: null,
-            runProofTimesS: [],
-            proofTimeScope: "Not yet measured on this host",
-            arenaBytes: null,
-            commandTimeS: null,
-            peakBytes: null,
-            rounds: 0,
-            source: `${spec.host} baseline pending`,
-          },
+          baseline: (() => {
+            const row = observed.find((item) => item.caseId === testCase.id)
+            return row === undefined
+              ? {
+                  proofTimeS: null,
+                  runProofTimesS: [],
+                  proofTimeScope: "Not yet measured on this host",
+                  arenaBytes: null,
+                  commandTimeS: null,
+                  peakBytes: null,
+                  rounds: 0,
+                  source: `${spec.host} baseline pending`,
+                }
+              : {
+                  proofTimeS: row.proofS,
+                  runProofTimesS: [row.proofS],
+                  proofTimeScope: "proof_duration: guest execution, witness and proof generation",
+                  arenaBytes: null,
+                  commandTimeS: null,
+                  peakBytes: row.peakBytes,
+                  rounds: row.samples,
+                  source: `${spec.host} direct observation, verified`,
+                }
+          })(),
         }),
         id: testCase.id,
       }
@@ -182,8 +202,8 @@ function joinCsp(content: Content, imported: Imported): Challenge[] {
     const contract = contractImportedSchema.parse({
       backend: backend.id,
       contractEpoch: csp.contract.contractEpoch,
-      baselineMeasuredAt: imported.repositoryDate.slice(0, 10),
-      baselineQualification: "pending",
+      baselineMeasuredAt: observedAt ?? imported.repositoryDate.slice(0, 10),
+      baselineQualification: observedAt === null ? "pending" : "direct-unranked",
       sourceRepository: csp.contract.sourceRepository.replace(/\.git$/, ""),
       sourceCommit: csp.contract.sourceCommit,
       editablePaths: spec.editablePaths,

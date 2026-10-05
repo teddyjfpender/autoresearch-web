@@ -11,7 +11,7 @@ import {
   proofFixtureSchema,
   type ProofObservation,
 } from "./proof-parser"
-import { cspContractSchema, cspFixtureSchema } from "./csp-parser"
+import { cspContractSchema, cspFixtureSchema, parseCspObservations } from "./csp-parser"
 import { verifyScorecards } from "./verify-scorecards"
 import stwoContent from "./content/challenges/stwo/challenge.json"
 
@@ -136,12 +136,21 @@ export const getChallengeRepositoryData = cache(async () => {
     readJson(sources.riscvCspBenchmark),
     readJson(sources.riscvCspFixture),
   ])
+  const cspObservations = (
+    await Promise.all(
+      (sources.riscvCspObservations ?? []).map(async (path) => {
+        const text = await readOptional(path)
+        return text === null ? [] : parseCspObservations(path, text)
+      }),
+    )
+  ).flat()
   const csp =
     cspBenchmark === null || cspFixtureRaw === null
       ? null
       : {
           contract: cspContractSchema.parse(cspBenchmark),
           fixture: cspFixtureSchema.parse(cspFixtureRaw),
+          observations: cspObservations,
         }
 
   return {

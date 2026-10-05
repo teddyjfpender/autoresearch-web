@@ -20,6 +20,7 @@ import {
   cairoProgress,
   candidateHighlight,
   historyMilestones,
+  proofTimeLead,
 } from "@/lib/candidates"
 import { getCommitDates, getResearchActivity } from "@/lib/github-research"
 
@@ -57,6 +58,7 @@ export default async function HomePage() {
         challenge,
         scorecards,
         candidates: candidates.length,
+        proofTime: proofTimeLead(challenge, candidates),
         highlight: candidateHighlight(candidates, challenge.focus.family),
         progress: cairoProgress(
           candidates,
