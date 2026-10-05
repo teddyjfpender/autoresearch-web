@@ -4,7 +4,7 @@ import { Tabs, TabsPanel } from "@autoresearch/ui/components/tabs"
 import { useEffect, useState, type ReactNode } from "react"
 
 import type { Family, Track } from "@/data/schema"
-import type { BucketId, Candidate, HistoryMilestone } from "@/lib/candidates"
+import type { BucketId, Candidate, CaseBaseline, HistoryMilestone } from "@/lib/candidates"
 
 import { registerTabs } from "../site/scroll"
 import { CandidateTable } from "./candidate-table"
@@ -27,6 +27,7 @@ export function ChallengeBoard({
   baselineDate,
   history,
   historyBucket,
+  cases,
   rankedChart,
   discussion,
   details,
@@ -41,6 +42,7 @@ export function ChallengeBoard({
   history: readonly HistoryMilestone[]
   /** The job tab the pre-baseline history belongs to. */
   historyBucket: BucketId
+  cases: readonly CaseBaseline[]
   /** The "what is being proved" panel. */
   proofs: ReactNode
   /** Signed-score chart, shown instead of the candidate chart once anything is ranked. */
@@ -123,6 +125,7 @@ export function ChallengeBoard({
               baselineDate={baselineDate}
               history={history}
               historyBucket={historyBucket}
+              cases={cases}
             />
           )}
           {candidates.length === 0 ? (

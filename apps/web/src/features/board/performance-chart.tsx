@@ -10,13 +10,15 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react"
 import type { Track, TrackId } from "@/data/schema"
 import {
   ratiosFor,
+  baselineTotal,
+  candidateTotal,
   allDated,
   chronological,
   paretoIds,
-  runningBest,
   scoreFor,
   type BucketId,
   type Candidate,
+  type CaseBaseline,
   type HistoryMilestone,
 } from "@/lib/candidates"
 import { formatDate, formatDateTime } from "@/lib/dates"
@@ -39,6 +41,13 @@ function shortMilestone(label: string): string {
 }
 
 export type ChartMode = TrackId | "pareto"
+type ChartUnit = "speedup" | "time"
+
+/** Seconds for display: milliseconds under one second. */
+const formatProofTime = (seconds: number, scale = seconds) =>
+  scale < 1
+    ? `${formatNumber(seconds * 1000, 0)} ms`
+    : `${formatNumber(seconds, scale < 10 ? 2 : 1)} s`
 
 function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
   const ref = useRef<T>(null)
@@ -63,6 +72,18 @@ function ratioDomain(values: readonly number[]): [number, number] {
   const half = Math.max((hi - lo) / 2, 0.05)
   const mid = (lo + hi) / 2
   return [mid - half, mid + half]
+}
+
+/** 1–2–5 ticks per decade inside [lo, hi], for a log axis. */
+function niceLogTicks(lo: number, hi: number): number[] {
+  const ticks: number[] = []
+  for (let decade = Math.floor(Math.log10(lo)); 10 ** decade <= hi; decade += 1) {
+    for (const step of [1, 2, 5]) {
+      const value = step * 10 ** decade
+      if (value >= lo && value <= hi) ticks.push(value)
+    }
+  }
+  return ticks
 }
 
 /** Enough decimals to tell neighbouring ticks apart. */
@@ -107,6 +128,9 @@ interface Model {
   yTicks: number[]
   y: (value: number) => number
   timed: boolean
+  /** Proof-time view requested but this tab's jobs have no full baseline on this host. */
+  missingBaseline: boolean
+  baselineLabel: string
 }
 
 /**
@@ -127,6 +151,7 @@ export function PerformanceChart({
   baselineDate,
   history,
   historyBucket,
+  cases,
 }: {
   candidates: readonly Candidate[]
   tracks: readonly Track[]
@@ -142,8 +167,11 @@ export function PerformanceChart({
   /** Modeled milestones before the baseline, shown on the Cairo tab. */
   history: readonly HistoryMilestone[]
   historyBucket: BucketId
+  /** Every case's pinned baseline, so the proof-time view can show seconds. */
+  cases: readonly CaseBaseline[]
 }) {
   const [hover, setHover] = useState<number | null>(null)
+  const [unit, setUnit] = useState<ChartUnit>("speedup")
   const [containerRef, width] = useWidth<HTMLDivElement>()
   const innerWidth = Math.max(200, width - MARGIN.left - MARGIN.right)
   const innerHeight = HEIGHT - MARGIN.top - MARGIN.bottom
@@ -197,6 +225,8 @@ export function PerformanceChart({
         yTicks: y.ticks(5),
         y,
         timed: false,
+        missingBaseline: false,
+        baselineLabel: "baseline",
       }
     }
 
@@ -204,6 +234,17 @@ export function PerformanceChart({
     const shownHistory = bucket === historyBucket ? history : []
     const ordered = chronological(candidates)
     const timed = allDated(ordered)
+    // Speedup (higher is better, 1× at the baseline) or summed proof seconds (lower is better).
+    const baseTotal = baselineTotal(cases, bucket)
+    const seconds = unit === "time"
+    const valueOf = (candidate: Candidate) =>
+      seconds ? candidateTotal(candidate, cases, bucket) : scoreFor(candidate, trackId, bucket)
+    const baselineValue = seconds ? (baseTotal ?? 1) : 1
+    const better = (a: number, b: number) => (seconds ? a < b : a > b)
+    const milestone = (item: HistoryMilestone) =>
+      seconds
+        ? { value: item.totalS, low: item.highTotalS, high: item.lowTotalS }
+        : { value: item.speedup, low: item.low, high: item.high }
 
     // Horizontal layout: [history milestones] gap [baseline → candidates in time].
     const historyWidth =
@@ -213,35 +254,54 @@ export function PerformanceChart({
     const start = Math.min(Date.parse(baselineDate), ...(timed ? times : []))
     const end = timed ? Math.max(...times, start + 3_600_000) : 0
     const span = end - start
-    const timeScale = createScale("lin", [start, end + span * 0.04], [startX, innerWidth])
+    // A short lead-in keeps the first candidate clear of the baseline marker at the axis start.
+    const timeScale = createScale(
+      "lin",
+      [start - span * 0.06, end + span * 0.04],
+      [startX, innerWidth],
+    )
     const step = ordered.length > 0 ? (innerWidth - startX) / ordered.length : 0
     const xFor = (index: number) =>
       timed ? timeScale(times[index] ?? start) : startX + (index + 1) * step
 
     const values = [
       ...ordered.flatMap((candidate) => {
-        const value = scoreFor(candidate, trackId, bucket)
+        const value = valueOf(candidate)
         return value === null ? [] : [value]
       }),
-      ...shownHistory.flatMap((item) => [
-        item.speedup,
-        item.low ?? item.speedup,
-        item.high ?? item.speedup,
-      ]),
+      ...shownHistory.flatMap((item) => {
+        const { value, low, high } = milestone(item)
+        return [value, low ?? value, high ?? value]
+      }),
     ]
-    // With history shown, the first milestone is the origin: 1.00× is where proving started, and
-    // every later point (baseline included) reads as speedup since then.
-    const base = shownHistory[0]?.speedup ?? 1
-    const normalized = [1 / base, ...values.map((value) => value / base)]
-    const lo = Math.min(1, ...normalized)
-    const hi = Math.max(1, ...normalized)
-    const pad = Math.max(0.02, (hi - lo) * 0.12)
-    const floor = shownHistory.length > 0 ? 1 : Math.max(0, lo - pad)
-    const scale = createScale("lin", [floor, hi + pad], [innerHeight, 0])
+    // Speedup with history: the first milestone is the origin, so 1.00× is where proving
+    // started and every later point (baseline included) reads as speedup since then.
+    const base = seconds ? 1 : (shownHistory[0]?.speedup ?? 1)
+    const normalized = [baselineValue / base, ...values.map((value) => value / base)]
+    const lo = Math.min(...normalized)
+    const hi = Math.max(...normalized)
+    const pad = Math.max(seconds ? hi * 0.04 : 0.02, (hi - lo) * 0.12)
+    // Seconds spanning several-fold (modeled history to today) read on a log axis, so the
+    // recent, smaller changes stay visible next to the early ones.
+    const logTime = seconds && lo > 0 && hi / lo > 4
+    const floor = logTime
+      ? lo / 1.15
+      : seconds
+        ? Math.max(0, lo - pad)
+        : shownHistory.length > 0
+          ? 1
+          : Math.max(0, lo - pad)
+    const ceiling = logTime ? hi * 1.15 : hi + pad
+    const scale = createScale(logTime ? "log" : "lin", [floor, ceiling], [innerHeight, 0])
     const y = (value: number) => scale(value / base)
 
-    const best = runningBest(ordered, trackId, bucket)
-    let path = `M${String(startX)},${String(y(1))}`
+    const best: number[] = []
+    for (const candidate of ordered) {
+      const value = valueOf(candidate)
+      const previous = best.at(-1) ?? baselineValue
+      best.push(value !== null && better(value, previous) ? value : previous)
+    }
+    let path = `M${String(startX)},${String(y(baselineValue))}`
     for (const [index, value] of best.entries()) {
       path += `H${String(xFor(index))}V${String(y(value))}`
     }
@@ -254,19 +314,22 @@ export function PerformanceChart({
     const labelSpacing = longest * LABEL_GLYPH_PX + 16
     const labelEvery = historyStep > 0 ? Math.ceil(labelSpacing / historyStep) : 1
     const lastLabelX = startX - FIRST_TIME_TICK_HALF_PX - labelSpacing / 2
-    const historyPoints = shownHistory.map((milestone, index) => ({
-      milestone,
-      tick: shortLabels[index] ?? milestone.label,
-      labeled: index % labelEvery === 0 && index * historyStep <= lastLabelX,
-      px: shownHistory.length === 1 ? historyWidth / 2 : index * historyStep,
-      py: y(milestone.speedup),
-      // Estimate whiskers below the origin are clipped to the axis.
-      lowY: milestone.low === null ? null : Math.min(innerHeight, y(milestone.low)),
-      highY: milestone.high === null ? null : Math.min(innerHeight, y(milestone.high)),
-    }))
+    const historyPoints = shownHistory.map((item, index) => {
+      const { value, low, high } = milestone(item)
+      return {
+        milestone: item,
+        tick: shortLabels[index] ?? item.label,
+        labeled: index % labelEvery === 0 && index * historyStep <= lastLabelX,
+        px: shownHistory.length === 1 ? historyWidth / 2 : index * historyStep,
+        py: y(value),
+        // Estimate whiskers beyond the axis are clipped to it.
+        lowY: low === null ? null : Math.min(innerHeight, Math.max(0, y(low))),
+        highY: high === null ? null : Math.min(innerHeight, Math.max(0, y(high))),
+      }
+    })
     const historyPath = historyPoints
       .map((point, index) => `${index === 0 ? "M" : "L"}${String(point.px)},${String(point.py)}`)
-      .concat(historyPoints.length > 0 ? [`L${String(startX)},${String(y(1))}`] : [])
+      .concat(historyPoints.length > 0 ? [`L${String(startX)},${String(y(baselineValue))}`] : [])
       .join("")
 
     const historyArea = historyPoints.length === 0 ? "" : `${historyPath}V${String(innerHeight)}H0Z`
@@ -288,12 +351,12 @@ export function PerformanceChart({
 
     return {
       points: ordered.map((candidate, index) => {
-        const value = scoreFor(candidate, trackId, bucket)
+        const value = valueOf(candidate)
         return {
           candidate,
           px: xFor(index),
           py: value === null ? null : y(value),
-          highlight: value !== null && value === best[index] && value > 1,
+          highlight: value !== null && value === best[index] && better(value, baselineValue),
         }
       }),
       history: historyPoints,
@@ -301,18 +364,23 @@ export function PerformanceChart({
       historyPath,
       historyArea,
       area: `${path}V${String(innerHeight)}H${String(startX)}Z`,
-      baseline: { x: startX, y: y(1) },
+      baseline: { x: startX, y: y(baselineValue) },
       xTicks,
-      // Label the origin itself when the axis starts at the first milestone.
-      yTicks:
-        shownHistory.length > 0
+      // Label the origin itself when the speedup axis starts at the first milestone.
+      yTicks: logTime
+        ? niceLogTicks(floor, ceiling)
+        : !seconds && shownHistory.length > 0
           ? [floor, ...scale.ticks(5).filter((tick) => tick > floor + (hi + pad - floor) * 0.08)]
           : scale.ticks(5),
       y: scale,
       timed,
+      missingBaseline: seconds && baseTotal === null,
+      baselineLabel: seconds ? `baseline · ${formatProofTime(baselineValue)}` : "baseline",
     }
   }, [
     candidates,
+    cases,
+    unit,
     mode,
     bucket,
     innerWidth,
@@ -348,12 +416,16 @@ export function PerformanceChart({
   const hoveredScore = hovered
     ? scoreFor(hovered.candidate, mode === "pareto" ? (track?.id ?? "latency") : mode, bucket)
     : null
+  const timeView = mode !== "pareto" && unit === "time"
+  const hoveredTotal = hovered ? candidateTotal(hovered.candidate, cases, bucket) : null
   const yTitle =
     mode === "pareto"
       ? `${METRICS.rTime.axis} (${METRICS.rTime.direction})`
-      : model.history[0] === undefined
-        ? `${track?.name ?? ""} speedup · ${track?.formula ?? ""}`
-        : `${track?.name ?? ""} speedup since ${model.history[0].milestone.label}`
+      : timeView
+        ? `Total proof time · ${bucketLabel}`
+        : model.history[0] === undefined
+          ? `${track?.name ?? ""} speedup · ${track?.formula ?? ""}`
+          : `${track?.name ?? ""} speedup since ${model.history[0].milestone.label}`
   const empty = candidates.every((candidate) => ratiosFor(candidate, bucket) === null)
 
   return (
@@ -367,24 +439,43 @@ export function PerformanceChart({
           <p className="mt-1 text-xs text-fg-faint">
             {mode === "pareto"
               ? "The line joins candidates nothing beats on both axes."
-              : "Higher is faster. The line is the best candidate so far."}
+              : timeView
+                ? "Lower is faster: summed proof time over this tab's jobs. The line is the best so far."
+                : "Higher is faster. The line is the best candidate so far."}
           </p>
         </div>
-        {multiTrack ? (
-          <SegmentedControl
-            aria-label="Chart track"
-            size="sm"
-            value={mode}
-            onValueChange={(next) => {
-              onModeChange(next)
-              setHover(null)
-            }}
-            options={[
-              ...tracks.map((item) => ({ value: item.id, label: item.name })),
-              { value: "pareto" as const, label: "Pareto" },
-            ]}
-          />
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {mode === "pareto" ? null : (
+            <SegmentedControl
+              aria-label="Chart units"
+              size="sm"
+              value={unit}
+              onValueChange={(next) => {
+                setUnit(next)
+                setHover(null)
+              }}
+              options={[
+                { value: "speedup" as const, label: "Speedup ×" },
+                { value: "time" as const, label: "Proof time" },
+              ]}
+            />
+          )}
+          {multiTrack ? (
+            <SegmentedControl
+              aria-label="Chart track"
+              size="sm"
+              value={mode}
+              onValueChange={(next) => {
+                onModeChange(next)
+                setHover(null)
+              }}
+              options={[
+                ...tracks.map((item) => ({ value: item.id, label: item.name })),
+                { value: "pareto" as const, label: "Pareto" },
+              ]}
+            />
+          ) : null}
+        </div>
       </figcaption>
 
       <div className="mt-4 overflow-x-auto">
@@ -419,205 +510,211 @@ export function PerformanceChart({
             </linearGradient>
           </defs>
           <g transform={`translate(${String(MARGIN.left)},${String(MARGIN.top)})`}>
-            {model.yTicks.map((tick) => (
-              <g key={tick} transform={`translate(0,${String(model.y(tick))})`}>
-                <line x2={innerWidth} stroke="var(--ar-line)" />
+            {model.missingBaseline ? null : (
+              <>
+                {model.yTicks.map((tick) => (
+                  <g key={tick} transform={`translate(0,${String(model.y(tick))})`}>
+                    <line x2={innerWidth} stroke="var(--ar-line)" />
+                    <text
+                      x={-12}
+                      dy="0.32em"
+                      textAnchor="end"
+                      className="fill-fg-faint font-mono text-[10px]"
+                    >
+                      {mode === "pareto"
+                        ? formatNumber(tick, tickDigits(model.yTicks))
+                        : timeView
+                          ? formatProofTime(tick, Math.max(...model.yTicks))
+                          : `${formatNumber(tick, tickDigits(model.yTicks))}×`}
+                    </text>
+                  </g>
+                ))}
+                {model.xTicks.map((tick) => (
+                  <text
+                    key={tick.value}
+                    x={tick.px}
+                    y={innerHeight + 22}
+                    textAnchor="middle"
+                    className="fill-fg-faint font-mono text-[10px]"
+                  >
+                    {tick.label}
+                  </text>
+                ))}
                 <text
-                  x={-12}
-                  dy="0.32em"
-                  textAnchor="end"
+                  transform={`translate(${String(-MARGIN.left + 14)},${String(innerHeight / 2)}) rotate(-90)`}
+                  textAnchor="middle"
+                  className="fill-fg-muted text-[11px]"
+                >
+                  <SvgFormula>{yTitle}</SvgFormula>
+                </text>
+                {mode === "pareto" ? (
+                  <text
+                    x={innerWidth / 2}
+                    y={innerHeight + 48}
+                    textAnchor="middle"
+                    className="fill-fg-muted text-[11px]"
+                  >
+                    <SvgFormula>{`${METRICS.rMemory.axis} (${METRICS.rMemory.direction})`}</SvgFormula>
+                  </text>
+                ) : null}
+
+                {/* Baseline: the 1× line, or the (1, 1) corner of the Pareto plane. */}
+                {mode === "pareto" ? null : (
+                  <line
+                    x2={innerWidth}
+                    y1={model.baseline.y}
+                    y2={model.baseline.y}
+                    stroke="var(--ar-fg-faint)"
+                    strokeDasharray="3 5"
+                  />
+                )}
+
+                {/* Earlier milestones lead into the baseline: the same line, hollow modeled points. */}
+                {model.history.length === 0 ? null : (
+                  <g>
+                    <motion.path
+                      key={`history-area-${unit}-${bucket}`}
+                      d={model.historyArea}
+                      fill="url(#perf-area)"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.8 }}
+                    />
+                    <motion.path
+                      key={`history-${unit}-${bucket}`}
+                      d={model.historyPath}
+                      fill="none"
+                      stroke="var(--ar-accent)"
+                      strokeWidth={1.5}
+                      initial={{ pathLength: 0 }}
+                      animate={{ pathLength: 1 }}
+                      transition={{ duration: 1.2, ease: [0.76, 0, 0.24, 1] }}
+                    />
+                    {model.history.map((point) => (
+                      <g key={point.milestone.label}>
+                        {point.lowY === null || point.highY === null ? null : (
+                          <line
+                            x1={point.px}
+                            x2={point.px}
+                            y1={point.lowY}
+                            y2={point.highY}
+                            stroke="var(--ar-accent)"
+                            strokeOpacity={0.25}
+                            strokeWidth={6}
+                            strokeLinecap="round"
+                          />
+                        )}
+                        <circle
+                          cx={point.px}
+                          cy={point.py}
+                          r={3.5}
+                          fill="var(--ar-bg)"
+                          stroke="var(--ar-accent)"
+                          strokeWidth={1.5}
+                        >
+                          <title>{point.milestone.label}</title>
+                        </circle>
+                        {point.labeled ? (
+                          <text
+                            x={point.px}
+                            y={innerHeight + 22}
+                            textAnchor="middle"
+                            className="fill-fg-faint font-mono text-[10px]"
+                          >
+                            {point.tick}
+                          </text>
+                        ) : null}
+                      </g>
+                    ))}
+                  </g>
+                )}
+
+                <circle
+                  cx={model.baseline.x}
+                  cy={model.baseline.y}
+                  r={4}
+                  fill="var(--ar-bg)"
+                  stroke="var(--ar-fg-muted)"
+                  strokeWidth={1.5}
+                />
+                <text
+                  x={model.baseline.x + 8}
+                  y={model.baseline.y + 16}
                   className="fill-fg-faint font-mono text-[10px]"
                 >
-                  {mode === "pareto"
-                    ? formatNumber(tick, tickDigits(model.yTicks))
-                    : `${formatNumber(tick, tickDigits(model.yTicks))}×`}
+                  {model.baselineLabel}
                 </text>
-              </g>
-            ))}
-            {model.xTicks.map((tick) => (
-              <text
-                key={tick.value}
-                x={tick.px}
-                y={innerHeight + 22}
-                textAnchor="middle"
-                className="fill-fg-faint font-mono text-[10px]"
-              >
-                {tick.label}
-              </text>
-            ))}
-            <text
-              transform={`translate(${String(-MARGIN.left + 14)},${String(innerHeight / 2)}) rotate(-90)`}
-              textAnchor="middle"
-              className="fill-fg-muted text-[11px]"
-            >
-              <SvgFormula>{yTitle}</SvgFormula>
-            </text>
-            {mode === "pareto" ? (
-              <text
-                x={innerWidth / 2}
-                y={innerHeight + 48}
-                textAnchor="middle"
-                className="fill-fg-muted text-[11px]"
-              >
-                <SvgFormula>{`${METRICS.rMemory.axis} (${METRICS.rMemory.direction})`}</SvgFormula>
-              </text>
-            ) : null}
 
-            {/* Baseline: the 1× line, or the (1, 1) corner of the Pareto plane. */}
-            {mode === "pareto" ? null : (
-              <line
-                x2={innerWidth}
-                y1={model.baseline.y}
-                y2={model.baseline.y}
-                stroke="var(--ar-fg-faint)"
-                strokeDasharray="3 5"
-              />
-            )}
-
-            {/* Earlier milestones lead into the baseline: the same line, hollow modeled points. */}
-            {model.history.length === 0 ? null : (
-              <g>
+                {model.area === "" ? null : (
+                  <motion.path
+                    key={`area-${mode}-${unit}-${bucket}`}
+                    d={model.area}
+                    fill="url(#perf-area)"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 1, delay: 0.3 }}
+                  />
+                )}
                 <motion.path
-                  key={`history-area-${bucket}`}
-                  d={model.historyArea}
-                  fill="url(#perf-area)"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.8 }}
-                />
-                <motion.path
-                  key={`history-${bucket}`}
-                  d={model.historyPath}
+                  key={`line-${mode}-${unit}-${bucket}`}
+                  d={model.path}
                   fill="none"
                   stroke="var(--ar-accent)"
                   strokeWidth={1.5}
+                  strokeLinejoin="round"
                   initial={{ pathLength: 0 }}
                   animate={{ pathLength: 1 }}
-                  transition={{ duration: 1.2, ease: [0.76, 0, 0.24, 1] }}
+                  transition={{ duration: 1.4, ease: [0.76, 0, 0.24, 1] }}
                 />
-                {model.history.map((point) => (
-                  <g key={point.milestone.label}>
-                    {point.lowY === null || point.highY === null ? null : (
-                      <line
-                        x1={point.px}
-                        x2={point.px}
-                        y1={point.lowY}
-                        y2={point.highY}
-                        stroke="var(--ar-accent)"
-                        strokeOpacity={0.25}
-                        strokeWidth={6}
-                        strokeLinecap="round"
-                      />
-                    )}
-                    <circle
-                      cx={point.px}
-                      cy={point.py}
-                      r={3.5}
-                      fill="var(--ar-bg)"
-                      stroke="var(--ar-accent)"
-                      strokeWidth={1.5}
-                    >
-                      <title>{point.milestone.label}</title>
-                    </circle>
-                    {point.labeled ? (
-                      <text
-                        x={point.px}
-                        y={innerHeight + 22}
-                        textAnchor="middle"
-                        className="fill-fg-faint font-mono text-[10px]"
-                      >
-                        {point.tick}
-                      </text>
-                    ) : null}
-                  </g>
-                ))}
-              </g>
-            )}
 
-            <circle
-              cx={model.baseline.x}
-              cy={model.baseline.y}
-              r={4}
-              fill="var(--ar-bg)"
-              stroke="var(--ar-fg-muted)"
-              strokeWidth={1.5}
-            />
-            <text
-              x={model.baseline.x + 8}
-              y={model.baseline.y - 8}
-              className="fill-fg-faint font-mono text-[10px]"
-            >
-              baseline
-            </text>
-
-            {model.area === "" ? null : (
-              <motion.path
-                key={`area-${mode}-${bucket}`}
-                d={model.area}
-                fill="url(#perf-area)"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 1, delay: 0.3 }}
-              />
-            )}
-            <motion.path
-              key={`line-${mode}-${bucket}`}
-              d={model.path}
-              fill="none"
-              stroke="var(--ar-accent)"
-              strokeWidth={1.5}
-              strokeLinejoin="round"
-              initial={{ pathLength: 0 }}
-              animate={{ pathLength: 1 }}
-              transition={{ duration: 1.4, ease: [0.76, 0, 0.24, 1] }}
-            />
-
-            {model.points.map((point) => {
-              const active =
-                selected === point.candidate.prNumber || hover === point.candidate.prNumber
-              const label = `#${String(point.candidate.prNumber)}`
-              return (
-                <g key={point.candidate.prNumber}>
-                  {mode === "pareto" || model.timed || point.py === null ? null : (
-                    <text
-                      x={point.px}
-                      y={innerHeight + 22}
-                      textAnchor="middle"
-                      className="fill-fg-faint font-mono text-[10px]"
-                    >
-                      {label}
-                    </text>
-                  )}
-                  {point.py === null ? null : (
-                    <>
-                      <circle
-                        cx={point.px}
-                        cy={point.py}
-                        r={active ? 6 : 4}
-                        fill={point.highlight ? "var(--ar-accent)" : "var(--ar-bg)"}
-                        stroke={point.highlight ? "var(--ar-bg)" : "var(--ar-fg-muted)"}
-                        strokeWidth={point.highlight ? 2 : 1.5}
-                      />
-                      {mode === "pareto" || model.timed ? (
+                {model.points.map((point) => {
+                  const active =
+                    selected === point.candidate.prNumber || hover === point.candidate.prNumber
+                  const label = `#${String(point.candidate.prNumber)}`
+                  return (
+                    <g key={point.candidate.prNumber}>
+                      {mode === "pareto" || model.timed || point.py === null ? null : (
                         <text
-                          {...(mode === "pareto" &&
-                          Math.hypot(point.px - model.baseline.x, point.py - model.baseline.y) < 48
-                            ? { x: point.px - 9, textAnchor: "end" }
-                            : mode === "pareto"
-                              ? { x: point.px + 9 }
-                              : { x: point.px, textAnchor: "middle" })}
-                          y={mode === "pareto" ? point.py + 3 : point.py - 10}
+                          x={point.px}
+                          y={innerHeight + 22}
+                          textAnchor="middle"
                           className="fill-fg-faint font-mono text-[10px]"
                         >
                           {label}
                         </text>
-                      ) : null}
-                    </>
-                  )}
-                </g>
-              )
-            })}
-
+                      )}
+                      {point.py === null ? null : (
+                        <>
+                          <circle
+                            cx={point.px}
+                            cy={point.py}
+                            r={active ? 6 : 4}
+                            fill={point.highlight ? "var(--ar-accent)" : "var(--ar-bg)"}
+                            stroke={point.highlight ? "var(--ar-bg)" : "var(--ar-fg-muted)"}
+                            strokeWidth={point.highlight ? 2 : 1.5}
+                          />
+                          {mode === "pareto" || model.timed ? (
+                            <text
+                              {...(mode === "pareto" &&
+                              Math.hypot(point.px - model.baseline.x, point.py - model.baseline.y) <
+                                48
+                                ? { x: point.px - 9, textAnchor: "end" }
+                                : mode === "pareto"
+                                  ? { x: point.px + 9 }
+                                  : { x: point.px, textAnchor: "middle" })}
+                              y={mode === "pareto" ? point.py + 3 : point.py - 10}
+                              className="fill-fg-faint font-mono text-[10px]"
+                            >
+                              {label}
+                            </text>
+                          ) : null}
+                        </>
+                      )}
+                    </g>
+                  )
+                })}
+              </>
+            )}
             <rect
               width={innerWidth}
               height={innerHeight}
@@ -634,7 +731,11 @@ export function PerformanceChart({
           </g>
         </svg>
 
-        {empty ? (
+        {model.missingBaseline ? (
+          <p className="pointer-events-none absolute inset-x-0 top-6 text-center text-sm text-fg-muted">
+            No baseline proof time on this host yet for every job in {bucketLabel}.
+          </p>
+        ) : empty ? (
           <p className="pointer-events-none absolute inset-x-0 top-6 text-center text-sm text-fg-muted">
             {candidates.length === 0
               ? "No reviewed candidates yet. The baseline holds."
@@ -674,6 +775,12 @@ export function PerformanceChart({
                     <dt className="text-fg-faint">vs. baseline</dt>
                     <dd>{hoveredScore === null ? "—" : `${formatNumber(hoveredScore, 3)}×`}</dd>
                   </div>
+                  {hoveredTotal === null ? null : (
+                    <div className="col-span-2">
+                      <dt className="text-fg-faint">Total proof time</dt>
+                      <dd>{formatProofTime(hoveredTotal)}</dd>
+                    </div>
+                  )}
                 </dl>
               )}
               {hovered.candidate.measuredAt === null ? null : (

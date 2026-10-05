@@ -68,6 +68,8 @@ const proofTimes = (row: ResearchCase) =>
     ? null
     : { baseline: row.baselineProofS, candidate: row.candidateProofS }
 
+const sum = (values: readonly number[]) => values.reduce((total, value) => total + value, 0)
+
 const geomean = (values: readonly number[]) =>
   Math.exp(values.reduce((sum, value) => sum + Math.log(value), 0) / values.length)
 
@@ -272,6 +274,10 @@ export interface HistoryMilestone {
   speedup: number
   low: number | null
   high: number | null
+  /** Summed proof seconds over the milestone's cases, with its estimate bounds when known. */
+  totalS: number
+  lowTotalS: number | null
+  highTotalS: number | null
 }
 
 /**
@@ -309,6 +315,9 @@ export function historyMilestones(
         // A slower bound in seconds is a lower speedup, so the ends swap.
         low: highs.length === group.length ? baseline / geomean(highs) : null,
         high: lows.length === group.length ? baseline / geomean(lows) : null,
+        totalS: sum(group.map((row) => row.proofS)),
+        lowTotalS: lows.length === group.length ? sum(lows) : null,
+        highTotalS: highs.length === group.length ? sum(highs) : null,
       }
     })
     .toSorted((a, b) => a.order - b.order)
@@ -369,4 +378,42 @@ export function cairoProgress(
   )
   const speedup = best / first.speedup
   return { since: first.label, speedup, reduction: 1 - 1 / speedup }
+}
+
+/** One case's pinned baseline proof time, for turning ratios back into seconds. */
+export interface CaseBaseline {
+  id: string
+  family: FamilyId
+  seconds: number | null
+}
+
+const inBucket = (family: FamilyId, bucket: BucketId) => bucket === "basket" || family === bucket
+
+/** Summed baseline proof seconds over a bucket's cases; null if any case lacks a baseline. */
+export function baselineTotal(cases: readonly CaseBaseline[], bucket: BucketId): number | null {
+  const members = cases.filter((item) => inBucket(item.family, bucket))
+  return members.length === 0 || members.some((item) => item.seconds === null)
+    ? null
+    : sum(members.map((item) => item.seconds ?? 0))
+}
+
+/**
+ * A candidate's summed proof seconds over a bucket: each case's baseline × the candidate's
+ * paired ratio, so every candidate is expressed on the same pinned baseline. Null when the
+ * bucket isn't fully measured.
+ */
+export function candidateTotal(
+  candidate: Candidate,
+  cases: readonly CaseBaseline[],
+  bucket: BucketId,
+): number | null {
+  const members = cases.filter((item) => inBucket(item.family, bucket))
+  if (members.length === 0) return null
+  let total = 0
+  for (const item of members) {
+    const measured = candidate.cases.find((row) => row.caseId === item.id)
+    if (measured === undefined || item.seconds === null) return null
+    total += item.seconds * measured.ratio
+  }
+  return total
 }

@@ -4,7 +4,7 @@ import { SegmentedControl } from "@autoresearch/ui/components/segmented-control"
 import { formatNumber } from "@autoresearch/ui/lib/format"
 import { cn } from "@autoresearch/ui/lib/cn"
 import { AnimatePresence, animate, motion, useInView, useReducedMotion } from "motion/react"
-import { useEffect, useRef, useState, type SVGProps } from "react"
+import { useEffect, useId, useRef, useState, type SVGProps } from "react"
 
 import type { Challenge } from "@/data/schema"
 import { formatSeconds } from "@/lib/format"
@@ -921,6 +921,9 @@ function GuestScene({ phase, spec, type }: { phase: number; spec: SceneSpec; typ
     : INSTRUCTIONS
   const cols = 7
   const rows = 11
+  const maskId = useId().replaceAll(/[^a-zA-Z0-9_-]/g, "")
+  const windowTop = 56
+  const windowHeight = guest.precompile ? 96 : 112
   return (
     <>
       {/* Inputs: the pinned guest binary and its input */}
@@ -947,33 +950,61 @@ function GuestScene({ phase, spec, type }: { phase: number; spec: SceneSpec; typ
       <Flow d="M90,136 C 100,136 100,112 112,112" status={execute} />
       {/* The RISC-V CPU running the guest */}
       <Region x={114} y={52} w={112} h={guest.precompile ? 104 : 120} status={execute} />
-      <clipPath id="guest-cpu">
-        <rect x={114} y={60} width={112} height={guest.precompile ? 90 : 106} />
-      </clipPath>
-      <motion.g
-        clipPath="url(#guest-cpu)"
-        initial={false}
-        animate={{ y: execute === "active" ? [0, -lineH * lines.length] : 0 }}
-        transition={
-          execute === "active"
-            ? { duration: (STEP_MS / 1000) * 0.9, ease: "linear" }
-            : { duration: 0.4, ease: EASE }
-        }
-      >
-        {[...lines, ...lines].map((line, index) => (
-          <text
-            key={`${line}-${String(index)}`}
-            x={124}
-            y={70 + index * lineH}
-            className={cn(
-              "font-mono text-[9px]",
-              line.startsWith("ecall") ? "fill-accent" : "fill-fg-muted",
-            )}
-          >
-            {line}
-          </text>
-        ))}
-      </motion.g>
+      {/* Instruction stream: a static, faded window over a scrolling list, so lines fade in and
+          out inside the CPU and never escape it. */}
+      <defs>
+        <linearGradient id={`${maskId}-fade`} x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor="white" stopOpacity="0" />
+          <stop offset="0.22" stopColor="white" stopOpacity="1" />
+          <stop offset="0.78" stopColor="white" stopOpacity="1" />
+          <stop offset="1" stopColor="white" stopOpacity="0" />
+        </linearGradient>
+        <mask
+          id={`${maskId}-window`}
+          maskUnits="userSpaceOnUse"
+          x={114}
+          y={windowTop}
+          width={112}
+          height={windowHeight}
+        >
+          <rect
+            x={114}
+            y={windowTop}
+            width={112}
+            height={windowHeight}
+            fill={`url(#${maskId}-fade)`}
+          />
+        </mask>
+      </defs>
+      <g mask={`url(#${maskId}-window)`}>
+        <motion.g
+          initial={false}
+          animate={{ y: execute === "active" ? [0, -lineH * lines.length] : 0 }}
+          transition={
+            execute === "active"
+              ? {
+                  duration: lines.length * 0.32,
+                  ease: "linear",
+                  repeat: Infinity,
+                }
+              : { duration: 0.5, ease: EASE }
+          }
+        >
+          {[...lines, ...lines].map((line, index) => (
+            <text
+              key={`${line}-${String(index)}`}
+              x={124}
+              y={windowTop + 14 + index * lineH}
+              className={cn(
+                "font-mono text-[9px]",
+                line.startsWith("ecall") ? "fill-accent" : "fill-fg-muted",
+              )}
+            >
+              {line}
+            </text>
+          ))}
+        </motion.g>
+      </g>
       {guest.precompile ? (
         <g>
           <Flow d="M170,156 V166" status={execute} />

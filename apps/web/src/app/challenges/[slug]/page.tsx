@@ -79,6 +79,11 @@ export default async function ChallengePage({ params }: Props) {
           baselineDate={challenge.contract.baselineMeasuredAt}
           history={history}
           historyBucket={challenge.focus.family}
+          cases={challenge.cases.map((testCase) => ({
+            id: testCase.id,
+            family: testCase.family,
+            seconds: testCase.baseline.proofTimeS,
+          }))}
           proofs={<ProofTypes challenge={challenge} />}
           rankedChart={
             summary.ranked > 0 ? (
