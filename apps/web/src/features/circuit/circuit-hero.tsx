@@ -5,18 +5,30 @@ import { Reveal } from "@autoresearch/ui/motion/reveal"
 import { SplitText } from "@autoresearch/ui/motion/split-text"
 import { ChevronRight } from "lucide-react"
 
-import type { CircuitChallenge } from "@/data/circuit/schema"
+import type { ReactNode } from "react"
+
+import type { CircuitChallenge, CircuitTrack } from "@/data/circuit/schema"
 import { formatProduct, formatToffoli, summarizeCircuits } from "@/lib/circuit"
 import { formatDate } from "@/lib/dates"
 import { routes } from "@/lib/routes"
 
 import { StatusBadge } from "../challenge/status-badge"
 import { SectionLink } from "../site/section-link"
-import { TrackSwitcher } from "./track-switcher"
 
-/** Compact header of one circuit-challenge track: identity, context and four computed figures. */
-export function CircuitHero({ challenge }: { challenge: CircuitChallenge }) {
-  const { best, fewestToffoli, fewestQubits, reduction, first } = summarizeCircuits(challenge)
+/**
+ * Compact header of a circuit challenge: identity, the track switch, and four figures computed
+ * for the selected track.
+ */
+export function CircuitHero({
+  challenge,
+  track,
+  switcher,
+}: {
+  challenge: CircuitChallenge
+  track: CircuitTrack
+  switcher: ReactNode
+}) {
+  const { best, fewestToffoli, fewestQubits, reduction, first } = summarizeCircuits(track)
   const architectureName = new Map(challenge.architectures.map((item) => [item.id, item.name]))
   const stats: { label: string; value: string; hint?: string }[] = [
     {
@@ -82,16 +94,18 @@ export function CircuitHero({ challenge }: { challenge: CircuitChallenge }) {
             <Reveal y={8} delay={0.05}>
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge status={challenge.status} />
-                <Badge>{challenge.headline}</Badge>
-                <Badge>{challenge.board.spec}</Badge>
-                <TrackSwitcher challenge={challenge} />
+                {switcher}
+                <Badge>{track.headline}</Badge>
+                <Badge>{track.spec}</Badge>
               </div>
             </Reveal>
             <h1 className="mt-5 text-[clamp(2.5rem,5vw,4.5rem)] leading-[0.95] font-normal tracking-[-0.05em]">
               <SplitText text={challenge.name} />
             </h1>
             <Reveal delay={0.2}>
-              <p className="mt-4 leading-relaxed text-fg-muted">{challenge.summary}</p>
+              <p className="mt-4 leading-relaxed text-fg-muted">
+                {challenge.headline} {track.summary}
+              </p>
             </Reveal>
           </div>
           <Reveal delay={0.3}>

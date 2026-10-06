@@ -215,7 +215,7 @@ export function ChallengeShowcase({
   proposeUrl,
 }: {
   entries: readonly ShowcaseEntry[]
-  /** Circuit-challenge tracks, shown after the proving races. */
+  /** Circuit challenges, shown after the proving races. */
   circuits: readonly CircuitChallenge[]
   proposeUrl: string
 }) {

@@ -96,8 +96,9 @@ architecture registry, the published targets, the ledger (`results.tsv`), the de
 the metric's formula are not hard-coded here; its format is documented in that repository's
 `spec/WEBSITE.md`.
 
-- Each track of a challenge becomes one route, `/challenges/<challenge>-<track>` (for example
-  `/challenges/femoco-reiher`), rendered by `features/circuit/`.
+- Each challenge is one route, `/challenges/<challenge>` (for example `/challenges/femoco`),
+  rendered by `features/circuit/`. Its tracks (Reiher and Li for FeMoco) are switched in place;
+  the selected track is mirrored in `?track=` so a link opens the same one.
 - The primary leaderboard is by **architecture**: one row per design with its best circuit. The
   chart plots every validated circuit, with the Toffoli-qubit front and the published point, or
   the best score over time. The circuit-level front is one tab away.

@@ -14,6 +14,7 @@ import {
   circuitSourcesSchema,
   circuitTargetsSchema,
   type CircuitChallenge,
+  type CircuitTrack,
 } from "./schema"
 
 const REVALIDATE_SECONDS = 300
@@ -32,7 +33,7 @@ function fill(template: string, values: Record<string, string>): string {
   return template.replaceAll(/\{(\w+)\}/g, (match, key: string) => values[key] ?? match)
 }
 
-/** Every track of every challenge in one repository, read at one immutable commit. */
+/** Every challenge in one repository, with all of its tracks, read at one immutable commit. */
 async function readRepository(url: string, name: string): Promise<CircuitChallenge[]> {
   const token = process.env["GITHUB_READ_TOKEN"]
   const auth: Record<string, string> =
@@ -83,47 +84,48 @@ async function readRepository(url: string, name: string): Promise<CircuitChallen
       const circuits = parseLedger(ledgerText)
       if (circuits.length !== leaderboard.ledgerRows)
         throw new Error(`${name} ${id}: the leaderboard is stale against the ledger`)
-      const siblings = content.tracks.map((track) => ({
-        slug: `${id}-${track.id}`,
-        id: track.id,
-        name: track.name,
-      }))
-      return content.tracks.flatMap((track): CircuitChallenge[] => {
+      const tracks = content.tracks.flatMap((track): CircuitTrack[] => {
         const board = leaderboard.tracks.find((item) => item.track === track.id)
         if (board === undefined) return []
         return [
           {
-            kind: "circuit",
-            slug: `${id}-${track.id}`,
-            challengeId: id,
-            trackId: track.id,
-            name: `${content.name} · ${track.name}`,
-            trackName: track.name,
-            group: content.group,
+            id: track.id,
+            name: track.name,
             headline: track.headline,
-            summary: `${content.headline} ${track.summary}`,
-            // A challenge is only as live as the repository's activation record says.
-            status: activation.status === "live" ? benchmark.status : activation.status,
-            gates: activation.gates,
-            content,
-            benchmark,
+            summary: track.summary,
+            spec: board.spec,
             board,
             circuits: circuits.filter((circuit) => circuit.track === track.id),
-            architectures,
             targets: targets.targets.filter((target) => target.track === track.id),
-            targetConventions: targets.conventions,
-            siblings,
-            links: content.links,
-            repositoryCommit: sha,
-            repositoryDate,
-            agentPrompt: fill(content.agentPrompt, {
-              track: track.id,
-              repositoryUrl: url,
-              name: content.name,
-            }),
           },
         ]
       })
+      if (tracks.length === 0) return []
+      const challenge: CircuitChallenge = {
+        kind: "circuit",
+        slug: id,
+        name: content.name,
+        group: content.group,
+        headline: content.headline,
+        summary: content.summary,
+        // A challenge is only as live as the repository's activation record says.
+        status: activation.status === "live" ? benchmark.status : activation.status,
+        gates: activation.gates,
+        content,
+        benchmark,
+        tracks,
+        architectures,
+        targetConventions: targets.conventions,
+        links: content.links,
+        repositoryCommit: sha,
+        repositoryDate,
+        agentPrompt: fill(content.agentPrompt, {
+          track: tracks.map((track) => track.id).join(" or "),
+          repositoryUrl: url,
+          name: content.name,
+        }),
+      }
+      return [challenge]
     }),
   )
   return routes.flat()

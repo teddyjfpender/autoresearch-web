@@ -1,6 +1,6 @@
 import { formatNumber } from "@autoresearch/ui/lib/format"
 
-import type { Circuit, CircuitChallenge } from "@/data/circuit/schema"
+import type { Circuit, CircuitTrack } from "@/data/circuit/schema"
 
 /** Toffolis per step, e.g. "11,500". */
 export const formatToffoli = (value: number): string => formatNumber(Math.round(value))
@@ -41,8 +41,8 @@ const least = (circuits: readonly Circuit[], key: (circuit: Circuit) => number):
     null,
   )
 
-export function summarizeCircuits(challenge: CircuitChallenge): CircuitSummary {
-  const { board, circuits } = challenge
+export function summarizeCircuits(track: CircuitTrack): CircuitSummary {
+  const { board, circuits } = track
   const first = board.history[0] ?? null
   const best = board.best
   return {

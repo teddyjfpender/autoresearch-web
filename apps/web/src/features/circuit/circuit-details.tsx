@@ -4,7 +4,7 @@ import { formatNumber } from "@autoresearch/ui/lib/format"
 import { ArrowUpRight, ChevronDown } from "lucide-react"
 import type { ReactNode } from "react"
 
-import type { CircuitChallenge } from "@/data/circuit/schema"
+import type { CircuitChallenge, CircuitTrack } from "@/data/circuit/schema"
 import { formatToffoli } from "@/lib/circuit"
 import { formatDate } from "@/lib/dates"
 
@@ -32,14 +32,21 @@ function Block({
  * Everything a participant needs besides the leaderboard. Every value comes from the challenge
  * repository's contract, registry and ledger, or its authored site content.
  */
-export function CircuitDetails({ challenge }: { challenge: CircuitChallenge }) {
-  const { benchmark, content, gates, targets, architectures, circuits } = challenge
+export function CircuitDetails({
+  challenge,
+  track,
+}: {
+  challenge: CircuitChallenge
+  track: CircuitTrack
+}) {
+  const { benchmark, content, gates, architectures } = challenge
+  const { targets, circuits } = track
   const done = gates.filter((gate) => gate.status === "done").length
   const { screen, full } = benchmark.validation
-  const fill = (command: string) => command.replaceAll("{track}", challenge.trackId)
+  const fill = (command: string) => command.replaceAll("{track}", track.id)
   const facts = [
-    { label: "Track", value: challenge.trackId },
-    { label: "Spec", value: challenge.board.spec },
+    { label: "Track", value: track.id },
+    { label: "Spec", value: track.spec },
     { label: "Epoch", value: benchmark.contractEpoch },
     { label: "Screen", value: `${screen.engine} · ${formatNumber(screen.samples)} lanes` },
     { label: "Full run", value: `${full.engine} · ${formatNumber(full.samples)} lanes` },
@@ -57,7 +64,7 @@ export function CircuitDetails({ challenge }: { challenge: CircuitChallenge }) {
         ))}
       </dl>
 
-      <Block title="The task" aside={challenge.headline}>
+      <Block title="The task" aside={track.headline}>
         <p className="text-sm text-fg-muted">{content.summary}</p>
         <p className="mt-3 text-sm text-fg-muted">{benchmark.standard.summary}</p>
       </Block>

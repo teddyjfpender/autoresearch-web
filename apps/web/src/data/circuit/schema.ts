@@ -196,15 +196,24 @@ export type CircuitTrackBoard = z.infer<typeof circuitLeaderboardSchema>["tracks
 export type CircuitContent = z.infer<typeof circuitContentSchema>
 export type CircuitBenchmark = z.infer<typeof circuitBenchmarkSchema>
 
-/** One route: a track of a circuit challenge, with everything its page renders. */
+/** One track of a circuit challenge: its board and every recorded circuit. */
+export interface CircuitTrack {
+  id: string
+  name: string
+  headline: string
+  summary: string
+  spec: string
+  board: CircuitTrackBoard
+  /** Every recorded circuit of the track, oldest first. */
+  circuits: Circuit[]
+  targets: CircuitTarget[]
+}
+
+/** One route: a circuit challenge with all of its tracks. */
 export interface CircuitChallenge {
   kind: "circuit"
   slug: string
-  challengeId: string
-  trackId: string
-  /** "FeMoco walk step · Reiher". */
   name: string
-  trackName: string
   group: string
   headline: string
   summary: string
@@ -212,13 +221,9 @@ export interface CircuitChallenge {
   gates: CircuitGate[]
   content: CircuitContent
   benchmark: CircuitBenchmark
-  board: CircuitTrackBoard
-  /** Every recorded circuit of the track, oldest first. */
-  circuits: Circuit[]
+  tracks: CircuitTrack[]
   architectures: CircuitArchitecture[]
-  targets: CircuitTarget[]
   targetConventions: string
-  siblings: { slug: string; id: string; name: string }[]
   links: CircuitContent["links"]
   repositoryCommit: string
   repositoryDate: string

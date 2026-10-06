@@ -1,33 +1,27 @@
-import { cn } from "@autoresearch/ui/lib/cn"
-import Link from "next/link"
+"use client"
 
-import type { CircuitChallenge } from "@/data/circuit/schema"
-import { routes } from "@/lib/routes"
+import { SegmentedControl } from "@autoresearch/ui/components/segmented-control"
 
-/** Pill links between the tracks of one circuit challenge. */
-export function TrackSwitcher({ challenge }: { challenge: CircuitChallenge }) {
-  if (challenge.siblings.length < 2) return null
+import type { CircuitTrack } from "@/data/circuit/schema"
+
+/** Switches between the tracks of one circuit challenge without leaving its page. */
+export function TrackSwitcher({
+  tracks,
+  value,
+  onValueChange,
+}: {
+  tracks: readonly CircuitTrack[]
+  value: string
+  onValueChange: (track: string) => void
+}) {
+  if (tracks.length < 2) return null
   return (
-    <nav
+    <SegmentedControl
       aria-label="Track"
-      className="inline-flex items-center gap-0.5 rounded-full border border-line p-0.5"
-    >
-      {challenge.siblings.map((sibling) => {
-        const active = sibling.slug === challenge.slug
-        return (
-          <Link
-            key={sibling.slug}
-            href={routes.challenge(sibling.slug)}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "inline-flex h-7 items-center rounded-full px-3 text-xs transition-colors duration-300",
-              active ? "bg-surface-strong text-fg" : "text-fg-faint hover:text-fg-muted",
-            )}
-          >
-            {sibling.name}
-          </Link>
-        )
-      })}
-    </nav>
+      size="sm"
+      value={value}
+      onValueChange={onValueChange}
+      options={tracks.map((track) => ({ value: track.id, label: track.name }))}
+    />
   )
 }

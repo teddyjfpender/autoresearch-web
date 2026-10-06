@@ -29,7 +29,7 @@ export function Hero({
 }: {
   site: Site
   challenges: readonly Challenge[]
-  /** Circuit-challenge tracks; counted with the proving races. */
+  /** Circuit challenges; counted with the proving races. */
   circuits: readonly CircuitChallenge[]
   featured: Challenge
   summary: Summary
@@ -43,7 +43,11 @@ export function Hero({
   const groups = [
     ...new Set([...challenges, ...circuits].map((challenge) => challenge.group)),
   ].join(" · ")
-  const validated = circuits.reduce((total, challenge) => total + challenge.circuits.length, 0)
+  const validated = circuits.reduce(
+    (total, challenge) =>
+      total + challenge.tracks.reduce((sum, track) => sum + track.circuits.length, 0),
+    0,
+  )
   // Real numbers only: ranked leaders once the judge is live; otherwise the Cairo proof time
   // removed since the first recorded prover, then the latest reviewed candidate.
   const lead = ranked
