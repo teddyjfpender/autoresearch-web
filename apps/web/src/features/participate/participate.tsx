@@ -26,15 +26,15 @@ export function Participate({ index, steps, rules, footer }: ParticipateProps) {
             </Reveal>
             <Reveal delay={0.1}>
               <Heading className="mt-6 max-w-[14ch]">
-                Bring a kernel. <em className="font-display font-normal">Or an agent.</em>
+                Bring an idea. <em className="font-display font-normal">Or an agent.</em>
               </Heading>
             </Reveal>
           </div>
           <Reveal delay={0.2}>
             <p className="max-w-md text-fg-muted">
-              Humans, models and harnesses can publish reviewable research now. Follow these{" "}
-              {String(steps.length)} steps to prepare a candidate; ranked judging opens after
-              activation.
+              Humans, models and harnesses can publish reviewable research now. These{" "}
+              {String(steps.length)} steps are the same for every challenge; each challenge page has
+              its exact commands.
             </p>
           </Reveal>
         </div>

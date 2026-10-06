@@ -9,6 +9,7 @@ import { SiteFooter } from "@/features/site/site-footer"
 import { SiteHeader } from "@/features/site/site-header"
 import { agentPrompt } from "@/lib/prompt"
 import { SmoothScroll } from "@/features/site/smooth-scroll"
+import { getCircuitChallenges } from "@/data/circuit/source"
 import { getChallenges, getSite } from "@/data/source"
 
 import "./globals.css"
@@ -41,7 +42,11 @@ export const viewport: Viewport = {
 }
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const [site, challenges] = await Promise.all([getSite(), getChallenges()])
+  const [site, challenges, circuits] = await Promise.all([
+    getSite(),
+    getChallenges(),
+    getCircuitChallenges(),
+  ])
   if (!challenges.some((challenge) => challenge.slug === site.featuredChallenge))
     throw new Error("Featured challenge is missing")
   return (
@@ -67,14 +72,23 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           <SiteHeader
             name={site.name}
             featuredSlug={site.featuredChallenge}
-            challenges={challenges.map((challenge) => ({
-              slug: challenge.slug,
-              name: challenge.name,
-              prompt: agentPrompt(challenge),
-            }))}
+            challenges={[
+              ...challenges.map((challenge) => ({
+                slug: challenge.slug,
+                name: challenge.name,
+                prompt: agentPrompt(challenge),
+              })),
+              ...circuits.map((challenge) => ({
+                slug: challenge.slug,
+                name: challenge.name,
+                prompt: challenge.agentPrompt,
+                note: "Submissions are open. The repository's CI judge validates and records every pull request.",
+                kind: "circuit" as const,
+              })),
+            ]}
           />
           <main id="main">{children}</main>
-          <SiteFooter site={site} challenges={challenges} />
+          <SiteFooter site={site} challenges={challenges} circuits={circuits} />
         </TooltipProvider>
       </body>
     </html>

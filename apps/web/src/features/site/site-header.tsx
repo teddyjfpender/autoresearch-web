@@ -55,14 +55,22 @@ export function SiteHeader({
   name: string
   featuredSlug: string
   /** Participation targets by slug; the prompt only appears on a challenge's own pages. */
-  challenges: readonly (PromptChallenge & { slug: string })[]
+  challenges: readonly (PromptChallenge & { slug: string; kind?: "circuit" })[]
 }) {
   const pathname = usePathname()
   const current = challenges.find((challenge) => {
     const base = routes.challenge(challenge.slug)
     return pathname === base || pathname.startsWith(`${base}/`)
   })
-  const nav = useMemo(() => navFor(pathname, featuredSlug), [pathname, featuredSlug])
+  const nav = useMemo(
+    () =>
+      navFor(
+        pathname,
+        featuredSlug,
+        challenges.filter((challenge) => challenge.kind === "circuit").map(({ slug }) => slug),
+      ),
+    [pathname, featuredSlug, challenges],
+  )
   const { scrollY } = useScroll()
   const [scrolled, setScrolled] = useState(false)
   // The menu is "open for a pathname", so navigating closes it automatically.

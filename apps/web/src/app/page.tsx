@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation"
 
+import { getCircuitChallenges } from "@/data/circuit/source"
 import {
   getChallenge,
   getChallenges,
@@ -28,10 +29,11 @@ export const revalidate = 300
 
 export default async function HomePage() {
   const site = await getSite()
-  const [featured, featuredScorecards, challenges] = await Promise.all([
+  const [featured, featuredScorecards, challenges, circuits] = await Promise.all([
     getChallenge(site.featuredChallenge),
     getScorecards(site.featuredChallenge),
     getChallenges(),
+    getCircuitChallenges(),
   ])
   if (!featured) notFound()
   const entries = await Promise.all(
@@ -75,20 +77,26 @@ export default async function HomePage() {
       <Hero
         site={site}
         challenges={challenges}
+        circuits={circuits}
         featured={featured}
         summary={summarize(featured, featuredScorecards)}
         highlight={featuredEntry?.highlight ?? null}
         progress={featuredEntry?.progress ?? null}
         candidates={entries.reduce((total, entry) => total + entry.candidates, 0)}
       />
-      <ChallengeShowcase entries={entries} proposeUrl={featured.links.discussions} />
+      <ChallengeShowcase
+        entries={entries}
+        circuits={circuits}
+        proposeUrl={featured.links.discussions}
+      />
       <StepsSection
         id="how"
         index="02"
         eyebrow="How it works"
         heading={
           <>
-            One workload. One rig. <em className="font-display font-normal">No</em> self-reporting.
+            One contract. One judge. <em className="font-display font-normal">No</em>{" "}
+            self-reporting.
           </>
         }
         steps={site.howItWorks}

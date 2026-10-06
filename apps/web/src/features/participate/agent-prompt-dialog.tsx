@@ -9,6 +9,8 @@ import { useId, useRef } from "react"
 export interface PromptChallenge {
   name: string
   prompt: string
+  /** How submissions to this challenge are judged today; shown under the prompt. */
+  note?: string
 }
 
 export function AgentPromptDialog({
@@ -21,7 +23,7 @@ export function AgentPromptDialog({
   const dialogRef = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   const { copied, copy } = useCopy()
-  const { prompt } = challenge
+  const { prompt, note } = challenge
   return (
     <>
       <Button
@@ -74,7 +76,7 @@ export function AgentPromptDialog({
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-line bg-bg-raised px-5 py-4 sm:px-7">
           <p className="max-w-sm text-xs text-fg-faint">
-            Review PRs are open. Ranked H200 judging has not launched yet.
+            {note ?? "Review PRs are open. Ranked H200 judging has not launched yet."}
           </p>
           <Button variant="accent" size="md" onClick={() => void copy(prompt)}>
             {copied ? <Check /> : <Copy />}

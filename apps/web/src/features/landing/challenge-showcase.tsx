@@ -6,6 +6,7 @@ import { Reveal } from "@autoresearch/ui/motion/reveal"
 import { Spotlight } from "@autoresearch/ui/motion/spotlight"
 import { ArrowUpRight, Plus } from "lucide-react"
 
+import type { CircuitChallenge } from "@/data/circuit/schema"
 import type { Challenge, Scorecard } from "@/data/schema"
 import { formatScore, formatSeconds } from "@/lib/format"
 import { routes } from "@/lib/routes"
@@ -13,6 +14,7 @@ import type { CairoProgress, CandidateHighlight, ProofTimeLead } from "@/lib/can
 import { summarize } from "@/lib/scoring"
 
 import { StatusBadge } from "../challenge/status-badge"
+import { CircuitCard } from "./circuit-card"
 import { LeadFigure, LeadModeProvider, LeadModeSwitch, type LeadFigureProps } from "./lead-figure"
 import { SectionLink } from "../site/section-link"
 import { Sparkline } from "./sparkline"
@@ -209,9 +211,12 @@ function ChallengeCard(entry: ShowcaseEntry) {
 
 export function ChallengeShowcase({
   entries,
+  circuits,
   proposeUrl,
 }: {
   entries: readonly ShowcaseEntry[]
+  /** Circuit challenges, shown after the proving races. */
+  circuits: readonly CircuitChallenge[]
   proposeUrl: string
 }) {
   return (
@@ -231,8 +236,8 @@ export function ChallengeShowcase({
             </div>
             <Reveal delay={0.2}>
               <p className="max-w-md text-fg-muted">
-                Each challenge pins one workload, one rig and one score. Leaderboards update as
-                results are re-proved.
+                Each challenge pins one workload, one judge and one score. Leaderboards update as
+                results are re-verified.
               </p>
             </Reveal>
           </div>
@@ -248,6 +253,10 @@ export function ChallengeShowcase({
                   id: entry.challenge.slug,
                   content: <ChallengeCard {...entry} />,
                 })),
+                ...circuits.map((challenge) => ({
+                  id: challenge.slug,
+                  content: <CircuitCard challenge={challenge} />,
+                })),
                 {
                   id: "next-race",
                   content: (
@@ -258,8 +267,8 @@ export function ChallengeShowcase({
                       <div>
                         <h3 className="text-2xl font-normal tracking-tight">Next race</h3>
                         <p className="mt-3 text-fg-muted">
-                          Have a proving bottleneck with a clean, verifiable score? Propose it as
-                          the next challenge.
+                          Have a hard problem with a clean, verifiable score? Propose it as the next
+                          challenge.
                         </p>
                       </div>
                       <Button asChild variant="outline" className="self-start">
