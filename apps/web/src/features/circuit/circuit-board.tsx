@@ -14,7 +14,7 @@ import { registerTabs } from "../site/scroll"
 import { ArchitectureTable } from "./architecture-table"
 import { CircuitChart, type CircuitChartMode } from "./circuit-chart"
 
-export const CIRCUIT_TABS = ["leaderboard", "circuits", "discussion", "details"] as const
+export const CIRCUIT_TABS = ["leaderboard", "about", "discussion", "details"] as const
 type CircuitTab = (typeof CIRCUIT_TABS)[number]
 const BOARD_ROOT = "board"
 
@@ -22,7 +22,7 @@ const isTab = (value: string): value is CircuitTab => CIRCUIT_TABS.some((tab) =>
 
 /**
  * A circuit track's page body. The leaderboard is by architecture, with every circuit on the
- * chart; the circuit-level front, discussion and details are one tab away. Tab state mirrors
+ * chart; what the challenge is about, discussion and details are one tab away. Tab state mirrors
  * the URL hash, as on the other challenge pages.
  */
 export function CircuitBoard({
@@ -30,7 +30,7 @@ export function CircuitBoard({
   circuits,
   registry,
   targets,
-  circuitList,
+  about,
   discussion,
   details,
   discussionCount,
@@ -39,13 +39,14 @@ export function CircuitBoard({
   circuits: readonly Circuit[]
   registry: readonly CircuitArchitecture[]
   targets: readonly CircuitTarget[]
-  circuitList: ReactNode
+  /** The challenge's own explainer and its tab label, when it has one. */
+  about: { label: string; panel: ReactNode } | null
   discussion: ReactNode
   details: ReactNode
   discussionCount: number | null
 }) {
   const [tab, setTab] = useState<CircuitTab>("leaderboard")
-  const [mode, setMode] = useState<CircuitChartMode>("frontier")
+  const [mode, setMode] = useState<CircuitChartMode>("history")
   const [selected, setSelected] = useState<string | null>(null)
   const architectureNames = Object.fromEntries(registry.map((item) => [item.id, item.name]))
 
@@ -77,7 +78,7 @@ export function CircuitBoard({
         }}
         items={[
           { value: "leaderboard", label: "Architectures", meta: board.architectures.length },
-          { value: "circuits", label: "Front", meta: board.front.length },
+          ...(about === null ? [] : [{ value: "about" as const, label: about.label }]),
           {
             value: "discussion",
             label: "Discussion",
@@ -92,6 +93,7 @@ export function CircuitBoard({
             front={board.front}
             history={board.history}
             targets={targets}
+            baseline={board.baseline ?? null}
             architectureNames={architectureNames}
             selected={selected}
             mode={mode}
@@ -110,9 +112,11 @@ export function CircuitBoard({
             />
           )}
         </TabsPanel>
-        <TabsPanel value="circuits" id="circuits">
-          {circuitList}
-        </TabsPanel>
+        {about === null ? null : (
+          <TabsPanel value="about" id="about">
+            {about.panel}
+          </TabsPanel>
+        )}
         <TabsPanel value="discussion" id="discussion">
           {discussion}
         </TabsPanel>

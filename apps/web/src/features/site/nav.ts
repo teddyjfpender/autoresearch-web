@@ -42,13 +42,13 @@ export function challengeNav(slug: string): NavConfig {
   }
 }
 
-/** A circuit challenge's board has its own tabs: architectures first, then the front. */
+/** A circuit challenge's board has its own tabs: architectures first, then what the challenge is about. */
 export function circuitNav(slug: string): NavConfig {
   return {
     back: { label: "All challenges", href: routes.homeSection("challenges") },
     items: [
       section("leaderboard", "Architectures", routes.challengeSection(slug, "leaderboard")),
-      section("circuits", "Front", routes.challengeSection(slug, "circuits")),
+      section("about", "About", routes.challengeSection(slug, "about")),
       section("discussion", "Discussion", routes.challengeSection(slug, "discussion")),
       section("details", "Details", routes.challengeSection(slug, "details")),
     ],

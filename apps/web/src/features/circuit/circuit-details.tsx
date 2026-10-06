@@ -108,6 +108,21 @@ export function CircuitDetails({
         </p>
       </Block>
 
+      {track.board.baseline == null ? null : (
+        <Block title="Baseline" aside="A ledger row, like any other">
+          <p className="text-sm">
+            <span className="font-mono tabular">
+              {formatToffoli(track.board.baseline.toffoli)} Toffolis ×{" "}
+              {formatNumber(track.board.baseline.qubits)} qubits ={" "}
+              {formatNumber(Math.round(track.board.baseline.score))}
+            </span>
+          </p>
+          {content.baseline === undefined ? null : (
+            <p className="mt-2 text-sm text-fg-muted">{content.baseline}</p>
+          )}
+        </Block>
+      )}
+
       {targets.length === 0 ? null : (
         <Block title="Published point" aside="Context, not a ledger row">
           <ul className="space-y-3">

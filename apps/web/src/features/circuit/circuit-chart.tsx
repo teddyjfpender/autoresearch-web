@@ -6,13 +6,7 @@ import { AnimatePresence, motion } from "motion/react"
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react"
 
 import type { Circuit, CircuitTarget } from "@/data/circuit/schema"
-import {
-  circuitDate,
-  circuitLabel,
-  formatCircuitScore,
-  formatProduct,
-  formatToffoli,
-} from "@/lib/circuit"
+import { circuitDate, circuitLabel, formatProduct, formatToffoli } from "@/lib/circuit"
 import { formatDate } from "@/lib/dates"
 
 import { createScale } from "../chart/scales"
@@ -23,15 +17,15 @@ const HEIGHT = 440
 const MARGIN = { top: 28, right: 28, bottom: 64, left: 76 }
 
 const MODES: { value: CircuitChartMode; label: string }[] = [
-  { value: "frontier", label: "Frontier" },
   { value: "history", label: "Over time" },
+  { value: "frontier", label: "Frontier" },
 ]
 
 const DESCRIPTIONS: Record<CircuitChartMode, string> = {
   frontier:
-    "Each dot is a validated circuit. Circuits on the line cannot be beaten on Toffolis and qubits at once. Lower left is better.",
+    "Each dot is a validated circuit. Circuits on the line cannot be beaten on Toffolis and qubits at once. The orange point is the baseline. Lower left is better.",
   history:
-    "Each dot is a validated circuit, by the date it was first measured. The line is the track's best score so far. Lower is better.",
+    "Each dot is a validated circuit, by the date it was first measured. The green line is the track's best score so far, the orange line the baseline. Lower is better.",
 }
 
 interface Point {
@@ -108,6 +102,7 @@ export function CircuitChart({
   front,
   history,
   targets,
+  baseline,
   architectureNames,
   selected,
   mode,
@@ -117,6 +112,8 @@ export function CircuitChart({
   front: readonly Circuit[]
   history: readonly Circuit[]
   targets: readonly CircuitTarget[]
+  /** The track's baseline circuit, marked on both views. */
+  baseline: Circuit | null
   architectureNames: Readonly<Record<string, string>>
   /** Architecture id brought forward, or null for all. */
   selected: string | null
@@ -167,6 +164,8 @@ export function CircuitChart({
           x: x(target.qubitsPublished),
           y: y(target.toffoliHarnessEquivalent),
         })),
+        baselinePoint: baseline === null ? null : { x: x(baseline.qubits), y: y(baseline.toffoli) },
+        baselineLine: null,
         xTitle: "Peak logical qubits (lower is better)",
         yTitle: "Toffolis per walk step (lower is better)",
       }
@@ -203,10 +202,12 @@ export function CircuitChart({
       })),
       yTicks: logTicks(yDomain).map((tick) => ({ at: y(tick), label: compact(tick) })),
       targets: [],
+      baselinePoint: null,
+      baselineLine: baseline === null ? null : y(baseline.score),
       xTitle: "Date first measured",
-      yTitle: "Score (lower is better)",
+      yTitle: "Score: Toffolis × qubits (lower is better)",
     }
-  }, [circuits, front, history, targets, mode, innerWidth, innerHeight])
+  }, [circuits, front, history, targets, baseline, mode, innerWidth, innerHeight])
 
   const onMove = (event: PointerEvent<SVGRectElement>) => {
     if (!model) return
@@ -302,12 +303,32 @@ export function CircuitChart({
                 </text>
               ) : null}
 
+              {model.baselineLine === null ? null : (
+                <g>
+                  <line
+                    x2={innerWidth}
+                    y1={model.baselineLine}
+                    y2={model.baselineLine}
+                    stroke="var(--ar-heat)"
+                    strokeWidth={1.5}
+                  />
+                  <text
+                    x={innerWidth}
+                    y={model.baselineLine - 8}
+                    textAnchor="end"
+                    fill="var(--ar-heat)"
+                    className="font-mono text-[10px]"
+                  >
+                    baseline · Low et al. 2025 · {compact(baseline?.score ?? 0)}
+                  </text>
+                </g>
+              )}
               {model.targets.map(({ target, x, y }) => (
                 <g key={target.id} transform={`translate(${String(x)},${String(y)})`}>
                   <circle r={4} fill="none" stroke="var(--ar-fg-muted)" strokeWidth={1.5} />
                   <text
-                    x={-10}
-                    dy="-1.1em"
+                    x={8}
+                    dy="1.9em"
                     textAnchor="end"
                     className="fill-fg-muted font-mono text-[10px]"
                   >
@@ -344,6 +365,23 @@ export function CircuitChart({
                   />
                 )
               })}
+
+              {model.baselinePoint === null ? null : (
+                <g
+                  transform={`translate(${String(model.baselinePoint.x)},${String(model.baselinePoint.y)})`}
+                >
+                  <circle r={9} fill="var(--ar-heat-soft)" />
+                  <circle r={4.5} fill="var(--ar-heat)" stroke="var(--ar-bg)" strokeWidth={1.5} />
+                  <text
+                    y={-14}
+                    textAnchor="middle"
+                    fill="var(--ar-heat)"
+                    className="font-mono text-[10px]"
+                  >
+                    baseline · Low et al. 2025
+                  </text>
+                </g>
+              )}
 
               <AnimatePresence>
                 {hover ? (
@@ -417,12 +455,12 @@ export function CircuitChart({
                   <dd>{formatNumber(hover.circuit.qubits)}</dd>
                 </div>
                 <div>
-                  <dt className="text-fg-faint">Product</dt>
-                  <dd>{formatProduct(hover.circuit.toffoliTimesQubits)}</dd>
+                  <dt className="text-fg-faint">Score</dt>
+                  <dd>{formatProduct(hover.circuit.score)}</dd>
                 </div>
               </dl>
               <p className="mt-2 text-fg-faint">
-                Score {formatCircuitScore(hover.circuit.score)} ·{" "}
+                {hover.circuit.opsSha256 === baseline?.opsSha256 ? "Track baseline · " : ""}
                 {formatDate(circuitDate(hover.circuit))}
               </p>
             </motion.div>

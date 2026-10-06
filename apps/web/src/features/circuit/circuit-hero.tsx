@@ -28,25 +28,28 @@ export function CircuitHero({
   track: CircuitTrack
   switcher: ReactNode
 }) {
-  const { best, fewestToffoli, fewestQubits, reduction, first } = summarizeCircuits(track)
+  const { best, fewestToffoli, fewestQubits, reduction, reference } = summarizeCircuits(track)
   const architectureName = new Map(challenge.architectures.map((item) => [item.id, item.name]))
   const stats: { label: string; value: string; hint?: string }[] = [
     {
-      label: "Best Toffolis × qubits",
-      value: best === null ? "—" : formatProduct(best.toffoliTimesQubits),
+      label: "Best score",
+      value: best === null ? "—" : formatProduct(best.score),
       ...(best === null
         ? {}
         : {
-            hint: `${formatToffoli(best.toffoli)} × ${formatNumber(best.qubits)} · ${architectureName.get(best.architecture) ?? best.architecture}`,
+            hint: `${formatToffoli(best.toffoli)} Toffolis × ${formatNumber(best.qubits)} qubits · ${architectureName.get(best.architecture) ?? best.architecture}`,
           }),
     },
     {
-      label: "Score removed",
+      label: reference?.kind === "first" ? "Score removed" : "Below the baseline",
       value: reduction === null ? "—" : `${formatNumber(reduction * 100, 0)}%`,
-      ...(first === null
+      ...(reference === null
         ? {}
         : {
-            hint: `since the first circuit, ${formatDate(new Date(first.unixTime * 1000).toISOString())}`,
+            hint:
+              reference.kind === "baseline"
+                ? `baseline ${formatProduct(reference.circuit.score)}: ${formatToffoli(reference.circuit.toffoli)} × ${formatNumber(reference.circuit.qubits)}, the Low et al. 2025 construction`
+                : `since the first circuit, ${formatDate(new Date(reference.circuit.unixTime * 1000).toISOString())}`,
           }),
     },
     {

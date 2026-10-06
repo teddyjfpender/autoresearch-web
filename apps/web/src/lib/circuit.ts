@@ -13,12 +13,6 @@ export const formatProduct = (value: number): string =>
       ? `${formatNumber(value / 1e6, 2)}M`
       : formatNumber(Math.round(value))
 
-/** The challenge score in engineering notation, e.g. "7.69e7". */
-export const formatCircuitScore = (score: number): string => {
-  const exponent = Math.floor(Math.log10(score))
-  return `${formatNumber(score / 10 ** exponent, 2)}e${String(exponent)}`
-}
-
 export const circuitDate = (circuit: Circuit): string =>
   new Date(circuit.unixTime * 1000).toISOString()
 
@@ -30,9 +24,10 @@ export interface CircuitSummary {
   best: Circuit | null
   fewestToffoli: Circuit | null
   fewestQubits: Circuit | null
-  /** Share of the score removed since the track's first recorded circuit, 0..1. */
+  /** The reference the reduction is measured from: the track's baseline, else its first circuit. */
+  reference: { circuit: Circuit; kind: "baseline" | "first" } | null
+  /** Share of the reference score removed by the best circuit, 0..1. */
   reduction: number | null
-  first: Circuit | null
 }
 
 const least = (circuits: readonly Circuit[], key: (circuit: Circuit) => number): Circuit | null =>
@@ -43,13 +38,20 @@ const least = (circuits: readonly Circuit[], key: (circuit: Circuit) => number):
 
 export function summarizeCircuits(track: CircuitTrack): CircuitSummary {
   const { board, circuits } = track
-  const first = board.history[0] ?? null
   const best = board.best
+  const first = board.history[0]
+  const reference: CircuitSummary["reference"] =
+    board.baseline != null
+      ? { circuit: board.baseline, kind: "baseline" }
+      : first === undefined
+        ? null
+        : { circuit: first, kind: "first" }
   return {
     best,
     fewestToffoli: least(circuits, (circuit) => circuit.toffoli),
     fewestQubits: least(circuits, (circuit) => circuit.qubits),
-    reduction: first === null || best === null ? null : 1 - best.score / first.score,
-    first,
+    reference,
+    reduction:
+      reference === null || best === null ? null : 1 - best.score / reference.circuit.score,
   }
 }

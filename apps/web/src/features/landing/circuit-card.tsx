@@ -4,7 +4,6 @@ import { ArrowUpRight } from "lucide-react"
 
 import type { CircuitChallenge } from "@/data/circuit/schema"
 import { formatProduct, formatToffoli, summarizeCircuits } from "@/lib/circuit"
-import { formatDate } from "@/lib/dates"
 import { routes } from "@/lib/routes"
 
 import { StatusBadge } from "../challenge/status-badge"
@@ -55,16 +54,18 @@ export function CircuitCard({ challenge }: { challenge: CircuitChallenge }) {
             improvement={{
               value: (lead?.reduction ?? 0) * 100,
               label:
-                lead?.first == null
+                lead?.reference == null
                   ? "no circuits recorded yet"
-                  : `less Toffolis × qubits (score) on the ${lead.track.name} track since its first circuit, ${formatDate(new Date(lead.first.unixTime * 1000).toISOString())}`,
+                  : lead.reference.kind === "baseline"
+                    ? `below the baseline on the ${lead.track.name} track: fewer Toffolis × qubits than the Low et al. 2025 construction`
+                    : `less Toffolis × qubits on the ${lead.track.name} track since its first circuit`,
             }}
             time={{ seconds: null, label: "no circuits recorded yet" }}
             {...(lead?.best == null
               ? {}
               : {
                   alternate: {
-                    value: lead.best.toffoliTimesQubits / 1e6,
+                    value: lead.best.score / 1e6,
                     fractionDigits: 2,
                     suffix: "M",
                     label: `Toffolis × qubits of the best ${lead.track.name} circuit: ${formatToffoli(lead.best.toffoli)} per step at ${formatNumber(lead.best.qubits)} qubits`,
