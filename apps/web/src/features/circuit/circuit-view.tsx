@@ -5,6 +5,7 @@ import { useEffect, useState, type ReactNode } from "react"
 
 import type { CircuitChallenge } from "@/data/circuit/schema"
 
+import { FemocoAbout } from "./about/femoco-about"
 import { CircuitBoard } from "./circuit-board"
 import { CircuitHero } from "./circuit-hero"
 import { TrackSwitcher } from "./track-switcher"
@@ -24,7 +25,7 @@ export function CircuitView({
 }: {
   challenge: CircuitChallenge
   /** Server-rendered per-track panels, keyed by track id. */
-  panels: Readonly<Record<string, { circuitList: ReactNode; details: ReactNode }>>
+  panels: Readonly<Record<string, { details: ReactNode }>>
   discussion: ReactNode
   discussionCount: number | null
 }) {
@@ -68,7 +69,14 @@ export function CircuitView({
           circuits={track.circuits}
           registry={challenge.architectures}
           targets={track.targets}
-          circuitList={panels[track.id]?.circuitList}
+          about={
+            challenge.slug === "femoco"
+              ? {
+                  label: "About FeMoco",
+                  panel: <FemocoAbout board={track.board} targets={track.targets} />,
+                }
+              : null
+          }
           discussionCount={discussionCount}
           discussion={discussion}
           details={panels[track.id]?.details}
