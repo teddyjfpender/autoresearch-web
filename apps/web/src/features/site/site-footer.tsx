@@ -1,6 +1,7 @@
 import { Container } from "@autoresearch/ui/components/layout"
 import { ArrowUpRight } from "lucide-react"
 
+import type { CircuitChallenge } from "@/data/circuit/schema"
 import type { Challenge, Site } from "@/data/schema"
 import { routes } from "@/lib/routes"
 
@@ -9,16 +10,37 @@ import { SectionLink } from "./section-link"
 
 const YEAR = new Date().getUTCFullYear()
 
-export function SiteFooter({ site, challenges }: { site: Site; challenges: readonly Challenge[] }) {
+export function SiteFooter({
+  site,
+  challenges,
+  circuits,
+}: {
+  site: Site
+  challenges: readonly Challenge[]
+  circuits: readonly CircuitChallenge[]
+}) {
   const [word, tld] = site.name.split(".")
   const featured = challenges.find((challenge) => challenge.slug === site.featuredChallenge)
   const linkClass = "text-fg-muted transition-colors hover:text-fg"
+  // One "Elsewhere" link per repository the site reads from.
+  const elsewhere = [
+    ...(featured
+      ? [
+          { label: "Proving challenge repository", href: featured.links.repo },
+          { label: "stwo-zig prover", href: featured.links.prover },
+        ]
+      : []),
+    ...[...new Map(circuits.map((challenge) => [challenge.links.repo, challenge])).values()].map(
+      (challenge) => ({ label: "Quantum challenge repository", href: challenge.links.repo }),
+    ),
+    ...(featured ? [{ label: "Research discussions", href: featured.links.discussions }] : []),
+  ]
   return (
     <footer className="relative overflow-hidden border-t border-line pt-20">
       <Container className="grid gap-12 md:grid-cols-[2fr_1fr_1fr_1fr]">
         <div className="max-w-sm">
           <p className="text-2xl leading-tight tracking-tight">
-            Open research, <em className="font-display text-3xl">verified</em> on the rig.
+            Open research, <em className="font-display text-3xl">verified</em> by the judge.
           </p>
           <p className="mt-4 text-sm text-fg-muted">{site.summary}</p>
         </div>
@@ -37,7 +59,7 @@ export function SiteFooter({ site, challenges }: { site: Site; challenges: reado
         <nav aria-label="Footer: challenges">
           <p className="text-label">Challenges</p>
           <ul className="mt-4 space-y-2 text-sm">
-            {challenges.map((challenge) => (
+            {[...challenges, ...circuits].map((challenge) => (
               <li key={challenge.slug}>
                 <SectionLink href={routes.challenge(challenge.slug)} className={linkClass}>
                   {challenge.name}
@@ -46,15 +68,11 @@ export function SiteFooter({ site, challenges }: { site: Site; challenges: reado
             ))}
           </ul>
         </nav>
-        {featured ? (
+        {elsewhere.length > 0 ? (
           <div>
             <p className="text-label">Elsewhere</p>
             <ul className="mt-4 space-y-2 text-sm">
-              {[
-                { label: "Challenge repository", href: featured.links.repo },
-                { label: "stwo-zig prover", href: featured.links.prover },
-                { label: "Research discussions", href: featured.links.discussions },
-              ].map((link) => (
+              {elsewhere.map((link) => (
                 <li key={link.href}>
                   <a
                     href={link.href}
@@ -76,7 +94,7 @@ export function SiteFooter({ site, challenges }: { site: Site; challenges: reado
         <span>
           © {YEAR} {site.site}
         </span>
-        <span>Data imported from the challenge repository · no ranked submissions yet</span>
+        <span>Data imported from the challenge repositories at a pinned commit</span>
       </Container>
 
       <p

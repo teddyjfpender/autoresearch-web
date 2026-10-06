@@ -13,7 +13,7 @@ const LeadModeContext = createContext<{ mode: LeadMode; setMode: (mode: LeadMode
   },
 })
 
-/** Shares one "improvement % ↔ proof time" choice across every challenge card. */
+/** Shares one "improvement % ↔ current best" choice across every challenge card. */
 export function LeadModeProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<LeadMode>("improvement")
   const value = useMemo(() => ({ mode, setMode }), [mode])
@@ -30,7 +30,7 @@ export function LeadModeSwitch() {
       onValueChange={setMode}
       options={[
         { value: "improvement" as const, label: "Improvement %" },
-        { value: "time" as const, label: "Proof time" },
+        { value: "time" as const, label: "Current best" },
       ]}
     />
   )
@@ -40,10 +40,12 @@ export interface LeadFigureProps {
   improvement: { value: number; label: string }
   /** Per-job proof seconds, or null when no baseline is published for this host. */
   time: { seconds: number | null; label: string }
+  /** A challenge whose best is not a duration (e.g. a gate-qubit product) shows this instead. */
+  alternate?: { value: number; fractionDigits: number; suffix: string; label: string }
 }
 
 /** A card's lead number: counts up whenever it appears or the mode changes. */
-export function LeadFigure({ improvement, time }: LeadFigureProps) {
+export function LeadFigure({ improvement, time, alternate }: LeadFigureProps) {
   const { mode } = use(LeadModeContext)
   const showTime = mode === "time"
   const milliseconds = time.seconds !== null && time.seconds < 1
@@ -51,7 +53,14 @@ export function LeadFigure({ improvement, time }: LeadFigureProps) {
     <div className="flex flex-wrap items-end gap-x-4 gap-y-1">
       <p className="text-[clamp(2.75rem,5vw,4.25rem)] leading-[0.85] font-light tracking-[-0.06em] text-accent tabular">
         {showTime ? (
-          time.seconds === null ? (
+          alternate ? (
+            <NumberTicker
+              key="alternate"
+              value={alternate.value}
+              fractionDigits={alternate.fractionDigits}
+              suffix={alternate.suffix}
+            />
+          ) : time.seconds === null ? (
             "—"
           ) : (
             <NumberTicker
@@ -66,7 +75,7 @@ export function LeadFigure({ improvement, time }: LeadFigureProps) {
         )}
       </p>
       <p className="max-w-[14rem] pb-1 text-sm leading-snug text-fg-muted">
-        {showTime ? time.label : improvement.label}
+        {showTime ? (alternate?.label ?? time.label) : improvement.label}
       </p>
     </div>
   )

@@ -1,8 +1,13 @@
 # autoresearch.fun
 
-Leaderboard site for the **Stwo CUDA** challenge: optimize the production Cairo and
-circuit-recursion CUDA paths in `stwo-zig` on one H200, from adapted Starknet PIEs to a
-verified recursive root. The contract mirrors `stwo-cuda-challenge` (epoch `h200-v1`).
+Leaderboard site for open research races. It hosts two kinds of challenge:
+
+- **Proving races** (Stwo CUDA, Metal and CPU; RISC-V CSP): optimize the production Cairo and
+  circuit-recursion paths in `stwo-zig`, from adapted Starknet PIEs to a verified recursive
+  root. The contract mirrors `stwo-cuda-challenge` (epoch `h200-v1`).
+- **Quantum-circuit challenges** (the FeMoco walk step, Reiher and Li tracks): validated
+  circuits from `quantum-autoresearch-challenge`, ranked by architecture first. See
+  [Circuit challenges](#circuit-challenges).
 
 > Measured values come from the public `stwo-cuda-challenge` repository at one
 > immutable commit per refresh. No ranked submission exists yet. Future rank
@@ -78,6 +83,27 @@ research-only regressions, and compare PIE, recursion and pipeline cases.
 Reviewed measurements and promotion states come from the challenge repository's
 current `data/site/sources.json` manifest. Every direct H200 highlight is
 explicitly unranked; only signed judge receipts can create leaderboard scores.
+
+## Circuit challenges
+
+Quantum-circuit challenges come from a second kind of repository and have their own data path,
+`apps/web/src/data/circuit/`. `content/circuit-sources.json` lists the repositories (today
+[quantum-autoresearch-challenge](https://github.com/teddyjfpender/quantum-autoresearch-challenge)).
+For each one the site reads `data/site/sources.json` at one pinned commit of `main`, then the
+files it names: the activation record, and per challenge the contract (`benchmark.json`), the
+architecture registry, the published targets, the ledger (`results.tsv`), the derived
+`leaderboard.json` and the display copy. The feed is self-describing, so units, direction and
+the metric's formula are not hard-coded here; its format is documented in that repository's
+`spec/WEBSITE.md`.
+
+- Each track of a challenge becomes one route, `/challenges/<challenge>-<track>` (for example
+  `/challenges/femoco-reiher`), rendered by `features/circuit/`.
+- The primary leaderboard is by **architecture**: one row per design with its best circuit. The
+  chart plots every validated circuit, with the Toffoli-qubit front and the published point, or
+  the best score over time. The circuit-level front is one tab away.
+- A repository that cannot be read (not yet public, or GitHub is unavailable) is skipped with a
+  warning and the rest of the site still builds. While a repository is private, set
+  `GITHUB_READ_TOKEN` to a token that can read it.
 
 ## Connecting the live challenge
 

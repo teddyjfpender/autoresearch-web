@@ -8,6 +8,7 @@ import { Reveal } from "@autoresearch/ui/motion/reveal"
 import { SplitText } from "@autoresearch/ui/motion/split-text"
 import { ArrowRight, ArrowUpRight } from "lucide-react"
 
+import type { CircuitChallenge } from "@/data/circuit/schema"
 import type { Challenge, Site } from "@/data/schema"
 import { routes } from "@/lib/routes"
 import type { Summary } from "@/lib/scoring"
@@ -19,6 +20,7 @@ import { WarpField } from "./warp-field"
 export function Hero({
   site,
   challenges,
+  circuits,
   featured,
   summary,
   highlight,
@@ -27,6 +29,8 @@ export function Hero({
 }: {
   site: Site
   challenges: readonly Challenge[]
+  /** Circuit-challenge tracks; counted with the proving races. */
+  circuits: readonly CircuitChallenge[]
   featured: Challenge
   summary: Summary
   highlight: CandidateHighlight | null
@@ -36,7 +40,10 @@ export function Hero({
   const ranked = summary.ranked > 0
   const primary = featured.tracks[0]
   const gpu = featured.contract.hardware.gpu
-  const groups = [...new Set(challenges.map((challenge) => challenge.group))].join(" · ")
+  const groups = [
+    ...new Set([...challenges, ...circuits].map((challenge) => challenge.group)),
+  ].join(" · ")
+  const validated = circuits.reduce((total, challenge) => total + challenge.circuits.length, 0)
   // Real numbers only: ranked leaders once the judge is live; otherwise the Cairo proof time
   // removed since the first recorded prover, then the latest reviewed candidate.
   const lead = ranked
@@ -62,7 +69,11 @@ export function Hero({
           }
         : null
   const figures = [
-    { label: "Challenges", value: formatNumber(challenges.length), hint: groups },
+    {
+      label: "Challenges",
+      value: formatNumber(challenges.length + circuits.length),
+      hint: groups,
+    },
     progress
       ? {
           label: "Cairo proofs",
@@ -74,9 +85,15 @@ export function Hero({
           value: formatNumber(featured.cases.length),
           hint: "shared across backends",
         },
-    ranked
-      ? { label: "Ranked", value: formatNumber(summary.ranked), hint: "scorecards" }
-      : { label: "Reviewed candidates", value: formatNumber(candidates), hint: "open PRs" },
+    circuits.length > 0
+      ? {
+          label: "Quantum circuits",
+          value: formatNumber(validated),
+          hint: "validated and in the ledger",
+        }
+      : ranked
+        ? { label: "Ranked", value: formatNumber(summary.ranked), hint: "scorecards" }
+        : { label: "Reviewed candidates", value: formatNumber(candidates), hint: "open PRs" },
   ]
 
   return (
