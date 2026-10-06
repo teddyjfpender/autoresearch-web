@@ -17,15 +17,15 @@ const HEIGHT = 440
 const MARGIN = { top: 28, right: 28, bottom: 64, left: 76 }
 
 const MODES: { value: CircuitChartMode; label: string }[] = [
-  { value: "frontier", label: "Frontier" },
   { value: "history", label: "Over time" },
+  { value: "frontier", label: "Frontier" },
 ]
 
 const DESCRIPTIONS: Record<CircuitChartMode, string> = {
   frontier:
-    "Each dot is a validated circuit. Circuits on the line cannot be beaten on Toffolis and qubits at once. Lower left is better.",
+    "Each dot is a validated circuit. Circuits on the line cannot be beaten on Toffolis and qubits at once. The orange point is the baseline. Lower left is better.",
   history:
-    "Each dot is a validated circuit, by the date it was first measured. The line is the track's best score so far. Lower is better.",
+    "Each dot is a validated circuit, by the date it was first measured. The green line is the track's best score so far, the orange line the baseline. Lower is better.",
 }
 
 interface Point {
@@ -303,32 +303,23 @@ export function CircuitChart({
                 </text>
               ) : null}
 
-              {model.baselinePoint === null ? null : (
-                <g
-                  transform={`translate(${String(model.baselinePoint.x)},${String(model.baselinePoint.y)})`}
-                >
-                  <circle r={6} fill="none" stroke="var(--ar-fg-muted)" strokeDasharray="2 3" />
-                  <text y={20} textAnchor="middle" className="fill-fg-muted font-mono text-[10px]">
-                    baseline
-                  </text>
-                </g>
-              )}
               {model.baselineLine === null ? null : (
                 <g>
                   <line
                     x2={innerWidth}
                     y1={model.baselineLine}
                     y2={model.baselineLine}
-                    stroke="var(--ar-fg-faint)"
-                    strokeDasharray="3 5"
+                    stroke="var(--ar-heat)"
+                    strokeWidth={1.5}
                   />
                   <text
                     x={innerWidth}
                     y={model.baselineLine - 8}
                     textAnchor="end"
-                    className="fill-fg-muted font-mono text-[10px]"
+                    fill="var(--ar-heat)"
+                    className="font-mono text-[10px]"
                   >
-                    baseline · the Low et al. 2025 construction
+                    baseline · Low et al. 2025 · {compact(baseline?.score ?? 0)}
                   </text>
                 </g>
               )}
@@ -336,8 +327,8 @@ export function CircuitChart({
                 <g key={target.id} transform={`translate(${String(x)},${String(y)})`}>
                   <circle r={4} fill="none" stroke="var(--ar-fg-muted)" strokeWidth={1.5} />
                   <text
-                    x={-10}
-                    dy="-1.1em"
+                    x={8}
+                    dy="1.9em"
                     textAnchor="end"
                     className="fill-fg-muted font-mono text-[10px]"
                   >
@@ -374,6 +365,23 @@ export function CircuitChart({
                   />
                 )
               })}
+
+              {model.baselinePoint === null ? null : (
+                <g
+                  transform={`translate(${String(model.baselinePoint.x)},${String(model.baselinePoint.y)})`}
+                >
+                  <circle r={9} fill="var(--ar-heat-soft)" />
+                  <circle r={4.5} fill="var(--ar-heat)" stroke="var(--ar-bg)" strokeWidth={1.5} />
+                  <text
+                    y={-14}
+                    textAnchor="middle"
+                    fill="var(--ar-heat)"
+                    className="font-mono text-[10px]"
+                  >
+                    baseline · Low et al. 2025
+                  </text>
+                </g>
+              )}
 
               <AnimatePresence>
                 {hover ? (

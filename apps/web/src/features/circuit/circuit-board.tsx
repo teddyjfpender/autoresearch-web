@@ -45,7 +45,7 @@ export function CircuitBoard({
   discussionCount: number | null
 }) {
   const [tab, setTab] = useState<CircuitTab>("leaderboard")
-  const [mode, setMode] = useState<CircuitChartMode>("frontier")
+  const [mode, setMode] = useState<CircuitChartMode>("history")
   const [selected, setSelected] = useState<string | null>(null)
   const architectureNames = Object.fromEntries(registry.map((item) => [item.id, item.name]))
 
