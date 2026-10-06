@@ -12,6 +12,9 @@ import { formatDate } from "@/lib/dates"
 
 type Row = CircuitTrackBoard["architectures"][number]
 
+const HISTORY_COLUMNS =
+  "grid-cols-[5.5rem_minmax(0,1fr)] sm:grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,14rem)_9rem_6rem]"
+
 function Breakout({ row, registry }: { row: Row; registry: CircuitArchitecture | undefined }) {
   const facts = [
     { label: "Best score", circuit: row.elite },
@@ -50,11 +53,21 @@ function Breakout({ row, registry }: { row: Row; registry: CircuitArchitecture |
       </dl>
       <div>
         <p className="text-label">Best score over time</p>
-        <ul className="mt-2 divide-y divide-line">
+        <div
+          className={cn("mt-2 hidden gap-4 border-b border-line pb-2 sm:grid", HISTORY_COLUMNS)}
+          aria-hidden
+        >
+          <span className="text-label">Date</span>
+          <span className="text-label">Circuit</span>
+          <span className="text-label">Submitted by</span>
+          <span className="text-right text-label">Toffolis × qubits</span>
+          <span className="text-right text-label">Score</span>
+        </div>
+        <ul className="divide-y divide-line">
           {row.history.toReversed().map((circuit) => (
             <li
               key={circuit.opsSha256}
-              className="grid grid-cols-[5.5rem_minmax(0,1fr)_auto] items-center gap-4 py-2 text-sm"
+              className={cn("grid items-center gap-x-4 gap-y-1 py-2 text-sm", HISTORY_COLUMNS)}
             >
               <span className="font-mono text-xs text-fg-faint">
                 {formatDate(circuitDate(circuit))}
@@ -62,8 +75,28 @@ function Breakout({ row, registry }: { row: Row; registry: CircuitArchitecture |
               <span className="truncate font-mono text-xs text-fg-muted">
                 {circuitLabel(circuit)}
               </span>
-              <span className="font-mono text-xs tabular">
+              <span className="col-span-2 min-w-0 truncate text-xs sm:col-span-1">
+                {circuit.author === null ? (
+                  <span className="text-fg-faint">unknown</span>
+                ) : (
+                  <a
+                    href={`https://github.com/${circuit.author}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-fg underline-offset-4 hover:underline"
+                  >
+                    {circuit.author}
+                  </a>
+                )}
+                {circuit.model === null ? null : (
+                  <span className="text-fg-faint"> · {circuit.model}</span>
+                )}
+              </span>
+              <span className="hidden text-right font-mono text-xs text-fg-muted tabular sm:block">
                 {formatToffoli(circuit.toffoli)} × {formatNumber(circuit.qubits)}
+              </span>
+              <span className="hidden text-right font-mono text-xs tabular sm:block">
+                {formatProduct(circuit.score)}
               </span>
             </li>
           ))}
