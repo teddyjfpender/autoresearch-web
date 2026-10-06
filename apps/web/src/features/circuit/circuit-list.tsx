@@ -2,13 +2,7 @@ import { cn } from "@autoresearch/ui/lib/cn"
 import { formatNumber } from "@autoresearch/ui/lib/format"
 
 import type { Circuit } from "@/data/circuit/schema"
-import {
-  circuitDate,
-  circuitLabel,
-  formatCircuitScore,
-  formatProduct,
-  formatToffoli,
-} from "@/lib/circuit"
+import { circuitDate, circuitLabel, formatProduct, formatToffoli } from "@/lib/circuit"
 import { formatDate } from "@/lib/dates"
 
 /** The Toffoli-qubit front, fewest qubits first: the secondary, circuit-level view. */
@@ -24,7 +18,7 @@ export function CircuitList({
   /** The track's best-score circuit, marked in the list. */
   best: Circuit | null
 }) {
-  const headers = ["Qubits", "Toffolis", "Product", "Score", "Architecture", "Circuit", "Measured"]
+  const headers = ["Qubits", "Toffolis", "Score", "Architecture", "Circuit", "Measured"]
   return (
     <div className="space-y-4">
       <p className="max-w-3xl text-sm text-fg-muted">
@@ -42,7 +36,7 @@ export function CircuitList({
                   scope="col"
                   className={cn(
                     "h-10 px-4 text-label font-normal sm:px-6",
-                    index < 4 ? "text-right" : "text-left",
+                    index < 3 ? "text-right" : "text-left",
                   )}
                 >
                   {header}
@@ -67,10 +61,7 @@ export function CircuitList({
                       leader ? "text-accent" : "text-fg-muted",
                     )}
                   >
-                    {formatProduct(circuit.toffoliTimesQubits)}
-                  </td>
-                  <td className="px-4 text-right font-mono text-xs text-fg-muted tabular sm:px-6">
-                    {formatCircuitScore(circuit.score)}
+                    {formatProduct(circuit.score)}
                   </td>
                   <td className="px-4 text-fg-muted sm:px-6">
                     {architectureNames[circuit.architecture] ?? circuit.architecture}

@@ -7,13 +7,7 @@ import { ChevronDown } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
 
 import type { CircuitArchitecture, CircuitTrackBoard } from "@/data/circuit/schema"
-import {
-  circuitDate,
-  circuitLabel,
-  formatCircuitScore,
-  formatProduct,
-  formatToffoli,
-} from "@/lib/circuit"
+import { circuitDate, circuitLabel, formatProduct, formatToffoli } from "@/lib/circuit"
 import { formatDate } from "@/lib/dates"
 
 type Row = CircuitTrackBoard["architectures"][number]
@@ -97,7 +91,7 @@ export function ArchitectureTable({
 }) {
   const best = rows[0]?.elite.score ?? 1
   const columns =
-    "grid-cols-[2.25rem_minmax(0,1fr)_6.5rem_1.5rem] sm:grid-cols-[2.5rem_minmax(0,1fr)_5rem_9.5rem_7rem_6rem_1.5rem]"
+    "grid-cols-[2.25rem_minmax(0,1fr)_6.5rem_1.5rem] sm:grid-cols-[2.5rem_minmax(0,1fr)_5rem_10rem_7rem_1.5rem]"
 
   return (
     <div className="overflow-hidden rounded-2xl border border-line">
@@ -109,7 +103,6 @@ export function ArchitectureTable({
         <span className="text-label">Architecture</span>
         <span className="text-right text-label">Circuits</span>
         <span className="text-right text-label">Toffolis × qubits</span>
-        <span className="text-right text-label">Product</span>
         <span className="text-right text-label">Score</span>
         <span />
       </div>
@@ -165,10 +158,7 @@ export function ArchitectureTable({
                   {formatToffoli(row.elite.toffoli)} × {formatNumber(row.elite.qubits)}
                 </span>
                 <span className="text-right font-mono text-sm text-fg tabular">
-                  {formatProduct(row.elite.toffoliTimesQubits)}
-                </span>
-                <span className="hidden text-right font-mono text-xs text-fg-muted tabular sm:block">
-                  {formatCircuitScore(row.elite.score)}
+                  {formatProduct(row.elite.score)}
                 </span>
                 <ChevronDown
                   aria-hidden

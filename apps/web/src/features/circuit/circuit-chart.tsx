@@ -6,13 +6,7 @@ import { AnimatePresence, motion } from "motion/react"
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react"
 
 import type { Circuit, CircuitTarget } from "@/data/circuit/schema"
-import {
-  circuitDate,
-  circuitLabel,
-  formatCircuitScore,
-  formatProduct,
-  formatToffoli,
-} from "@/lib/circuit"
+import { circuitDate, circuitLabel, formatProduct, formatToffoli } from "@/lib/circuit"
 import { formatDate } from "@/lib/dates"
 
 import { createScale } from "../chart/scales"
@@ -108,6 +102,7 @@ export function CircuitChart({
   front,
   history,
   targets,
+  baseline,
   architectureNames,
   selected,
   mode,
@@ -117,6 +112,8 @@ export function CircuitChart({
   front: readonly Circuit[]
   history: readonly Circuit[]
   targets: readonly CircuitTarget[]
+  /** The track's baseline circuit, marked on both views. */
+  baseline: Circuit | null
   architectureNames: Readonly<Record<string, string>>
   /** Architecture id brought forward, or null for all. */
   selected: string | null
@@ -167,6 +164,8 @@ export function CircuitChart({
           x: x(target.qubitsPublished),
           y: y(target.toffoliHarnessEquivalent),
         })),
+        baselinePoint: baseline === null ? null : { x: x(baseline.qubits), y: y(baseline.toffoli) },
+        baselineLine: null,
         xTitle: "Peak logical qubits (lower is better)",
         yTitle: "Toffolis per walk step (lower is better)",
       }
@@ -203,10 +202,12 @@ export function CircuitChart({
       })),
       yTicks: logTicks(yDomain).map((tick) => ({ at: y(tick), label: compact(tick) })),
       targets: [],
+      baselinePoint: null,
+      baselineLine: baseline === null ? null : y(baseline.score),
       xTitle: "Date first measured",
-      yTitle: "Score (lower is better)",
+      yTitle: "Score: Toffolis × qubits (lower is better)",
     }
-  }, [circuits, front, history, targets, mode, innerWidth, innerHeight])
+  }, [circuits, front, history, targets, baseline, mode, innerWidth, innerHeight])
 
   const onMove = (event: PointerEvent<SVGRectElement>) => {
     if (!model) return
@@ -302,6 +303,35 @@ export function CircuitChart({
                 </text>
               ) : null}
 
+              {model.baselinePoint === null ? null : (
+                <g
+                  transform={`translate(${String(model.baselinePoint.x)},${String(model.baselinePoint.y)})`}
+                >
+                  <circle r={6} fill="none" stroke="var(--ar-fg-muted)" strokeDasharray="2 3" />
+                  <text y={20} textAnchor="middle" className="fill-fg-muted font-mono text-[10px]">
+                    baseline
+                  </text>
+                </g>
+              )}
+              {model.baselineLine === null ? null : (
+                <g>
+                  <line
+                    x2={innerWidth}
+                    y1={model.baselineLine}
+                    y2={model.baselineLine}
+                    stroke="var(--ar-fg-faint)"
+                    strokeDasharray="3 5"
+                  />
+                  <text
+                    x={innerWidth}
+                    y={model.baselineLine - 8}
+                    textAnchor="end"
+                    className="fill-fg-muted font-mono text-[10px]"
+                  >
+                    baseline · the Low et al. 2025 construction
+                  </text>
+                </g>
+              )}
               {model.targets.map(({ target, x, y }) => (
                 <g key={target.id} transform={`translate(${String(x)},${String(y)})`}>
                   <circle r={4} fill="none" stroke="var(--ar-fg-muted)" strokeWidth={1.5} />
@@ -417,12 +447,12 @@ export function CircuitChart({
                   <dd>{formatNumber(hover.circuit.qubits)}</dd>
                 </div>
                 <div>
-                  <dt className="text-fg-faint">Product</dt>
-                  <dd>{formatProduct(hover.circuit.toffoliTimesQubits)}</dd>
+                  <dt className="text-fg-faint">Score</dt>
+                  <dd>{formatProduct(hover.circuit.score)}</dd>
                 </div>
               </dl>
               <p className="mt-2 text-fg-faint">
-                Score {formatCircuitScore(hover.circuit.score)} ·{" "}
+                {hover.circuit.opsSha256 === baseline?.opsSha256 ? "Track baseline · " : ""}
                 {formatDate(circuitDate(hover.circuit))}
               </p>
             </motion.div>

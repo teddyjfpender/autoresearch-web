@@ -92,6 +92,7 @@ export function CircuitBoard({
             front={board.front}
             history={board.history}
             targets={targets}
+            baseline={board.baseline ?? null}
             architectureNames={architectureNames}
             selected={selected}
             mode={mode}

@@ -138,6 +138,8 @@ export const circuitLeaderboardSchema = z.object({
       spec: z.string(),
       circuits: z.number().int().nonnegative(),
       best: circuitSchema.nullable(),
+      /** The construction the challenge starts from, as a ledger row; absent in older feeds. */
+      baseline: circuitSchema.nullish(),
       architectures: z.array(
         z.object({
           id: slug,
@@ -181,6 +183,8 @@ export const circuitContentSchema = z.object({
   levels: z.array(z.object({ id: z.string(), name: z.string(), description: z.string() })),
   standard: z.string(),
   rules: z.array(z.string()).min(1),
+  /** What the tracks' baseline is, in a sentence. */
+  baseline: z.string().optional(),
   participate: z.array(stepSchema).min(1),
   agentPrompt: z.string().min(1),
   links: z.object({ repo: z.url(), discussions: z.url(), task: z.url() }),
