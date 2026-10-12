@@ -2,6 +2,7 @@ import { Container } from "@autoresearch/ui/components/layout"
 import { ArrowUpRight } from "lucide-react"
 
 import type { CircuitChallenge } from "@/data/circuit/schema"
+import type { ScriptChallenge } from "@/data/script/schema"
 import type { Challenge, Site } from "@/data/schema"
 import { routes } from "@/lib/routes"
 
@@ -14,10 +15,12 @@ export function SiteFooter({
   site,
   challenges,
   circuits,
+  scripts,
 }: {
   site: Site
   challenges: readonly Challenge[]
   circuits: readonly CircuitChallenge[]
+  scripts: readonly ScriptChallenge[]
 }) {
   const [word, tld] = site.name.split(".")
   const featured = challenges.find((challenge) => challenge.slug === site.featuredChallenge)
@@ -32,6 +35,9 @@ export function SiteFooter({
       : []),
     ...[...new Map(circuits.map((challenge) => [challenge.links.repo, challenge])).values()].map(
       (challenge) => ({ label: "Quantum challenge repository", href: challenge.links.repo }),
+    ),
+    ...[...new Map(scripts.map((challenge) => [challenge.links.repo, challenge])).values()].map(
+      (challenge) => ({ label: "Bitcoin Script challenge repository", href: challenge.links.repo }),
     ),
     ...(featured ? [{ label: "Research discussions", href: featured.links.discussions }] : []),
   ]
@@ -59,7 +65,7 @@ export function SiteFooter({
         <nav aria-label="Footer: challenges">
           <p className="text-label">Challenges</p>
           <ul className="mt-4 space-y-2 text-sm">
-            {[...challenges, ...circuits].map((challenge) => (
+            {[...challenges, ...circuits, ...scripts].map((challenge) => (
               <li key={challenge.slug}>
                 <SectionLink href={routes.challenge(challenge.slug)} className={linkClass}>
                   {challenge.name}

@@ -10,6 +10,7 @@ import { SiteHeader } from "@/features/site/site-header"
 import { agentPrompt } from "@/lib/prompt"
 import { SmoothScroll } from "@/features/site/smooth-scroll"
 import { getCircuitChallenges } from "@/data/circuit/source"
+import { getScriptChallenges } from "@/data/script/source"
 import { getChallenges, getSite } from "@/data/source"
 
 import "./globals.css"
@@ -42,10 +43,11 @@ export const viewport: Viewport = {
 }
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const [site, challenges, circuits] = await Promise.all([
+  const [site, challenges, circuits, scripts] = await Promise.all([
     getSite(),
     getChallenges(),
     getCircuitChallenges(),
+    getScriptChallenges(),
   ])
   if (!challenges.some((challenge) => challenge.slug === site.featuredChallenge))
     throw new Error("Featured challenge is missing")
@@ -85,10 +87,17 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                 note: "Submissions are open. The repository's CI judge validates and records every pull request.",
                 kind: "circuit" as const,
               })),
+              ...scripts.map((challenge) => ({
+                slug: challenge.slug,
+                name: challenge.name,
+                prompt: challenge.agentPrompt,
+                note: "Submissions are open. The repository's CI judge validates and records every pull request.",
+                kind: "script" as const,
+              })),
             ]}
           />
           <main id="main">{children}</main>
-          <SiteFooter site={site} challenges={challenges} circuits={circuits} />
+          <SiteFooter site={site} challenges={challenges} circuits={circuits} scripts={scripts} />
         </TooltipProvider>
       </body>
     </html>

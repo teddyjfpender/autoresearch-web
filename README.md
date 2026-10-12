@@ -8,6 +8,9 @@ Leaderboard site for open research races. It hosts two kinds of challenge:
 - **Quantum-circuit challenges** (the FeMoco walk step, Reiher and Li tracks): validated
   circuits from `quantum-autoresearch-challenge`, ranked by architecture first. See
   [Circuit challenges](#circuit-challenges).
+- **Bitcoin Script challenges** (Binohash, standard and high tracks): validated scripts from
+  `binohash-autoresearch-challenge`, scored by bytes, opcodes and honest grinding work at a
+  fixed security level. See [Script challenges](#script-challenges).
 
 > Measured values come from the public `stwo-cuda-challenge` repository at one
 > immutable commit per refresh. No ranked submission exists yet. Future rank
@@ -105,6 +108,28 @@ the metric's formula are not hard-coded here; its format is documented in that r
 - A repository that cannot be read (not yet public, or GitHub is unavailable) is skipped with a
   warning and the rest of the site still builds. While a repository is private, set
   `GITHUB_READ_TOKEN` to a token that can read it.
+
+## Script challenges
+
+Bitcoin Script challenges follow the circuit pattern with their own data path,
+`apps/web/src/data/script/`, and their own feature directory, `features/script/`.
+`content/script-sources.json` lists the repositories (today
+[binohash-autoresearch-challenge](https://github.com/teddyjfpender/binohash-autoresearch-challenge)).
+The feed has the same shape as a circuit repository's (`data/site/sources.json` at one pinned
+commit of `main`, then the files it names) with `bac-` schemas; its format is that
+repository's `spec/WEBSITE.md`.
+
+- A script has three counts, not two: bytes, opcodes and honest work (log2 SHA-256
+  compressions). The score is their product; the security level is held at a per-track floor
+  and is shown, never ranked.
+- The board's views (architecture rows, the three-way front, the running best) are computed
+  here from the instances, in `lib/script.ts`. The chart's trade-off view plots work against
+  bytes and rings the instances no other beats on all three counts.
+- **Starting board.** While a track has no ledger rows, the site shows the repository's
+  `starting-board.json` in their place: instances measured by the challenge's evaluator on
+  public lanes that the judge has not recorded. They are labelled as such in the hero, above
+  the chart and in the tooltip, and only the trade-off view is offered, since they share one
+  date. As soon as a track has a row, the rows are shown and the starting board is not.
 
 ## Connecting the live challenge
 
