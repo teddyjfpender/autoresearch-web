@@ -56,13 +56,28 @@ export function circuitNav(slug: string): NavConfig {
   }
 }
 
+/** A script challenge's board: architectures, then discussion and details. */
+export function scriptNav(slug: string): NavConfig {
+  return {
+    back: { label: "All challenges", href: routes.homeSection("challenges") },
+    items: [
+      section("leaderboard", "Architectures", routes.challengeSection(slug, "leaderboard")),
+      section("discussion", "Discussion", routes.challengeSection(slug, "discussion")),
+      section("details", "Details", routes.challengeSection(slug, "details")),
+    ],
+    cta: { label: "Start solving", href: routes.challengeSection(slug, "details") },
+  }
+}
+
 /** Pick the nav for the current URL. */
 export function navFor(
   pathname: string,
   featuredSlug: string,
   circuitSlugs: readonly string[] = [],
+  scriptSlugs: readonly string[] = [],
 ): NavConfig {
   const slug = /^\/challenges\/([a-z0-9-]+)/.exec(pathname)?.[1]
   if (slug === undefined) return landingNav(featuredSlug)
+  if (scriptSlugs.includes(slug)) return scriptNav(slug)
   return circuitSlugs.includes(slug) ? circuitNav(slug) : challengeNav(slug)
 }

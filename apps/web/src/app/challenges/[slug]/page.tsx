@@ -11,12 +11,14 @@ import {
   getScorecards,
 } from "@/data/source"
 import { getCircuitChallenge, getCircuitChallenges } from "@/data/circuit/source"
+import { getScriptChallenge, getScriptChallenges } from "@/data/script/source"
 import { ChallengeBoard } from "@/features/board/challenge-board"
 import { ChallengeDetails } from "@/features/board/challenge-details"
 import { DiscussionPanel } from "@/features/board/discussion-panel"
 import { ChallengeHero } from "@/features/challenge/challenge-hero"
 import { ProgressChart } from "@/features/chart/progress-chart"
 import { CircuitPage } from "@/features/circuit/circuit-page"
+import { ScriptPage } from "@/features/script/script-page"
 import { ProofTypes } from "@/features/board/proof-types"
 import {
   buildCandidates,
@@ -35,13 +37,20 @@ interface Props {
 export const revalidate = 300
 
 export async function generateStaticParams(): Promise<{ slug: string }[]> {
-  const [challenges, circuits] = await Promise.all([getChallenges(), getCircuitChallenges()])
-  return [...challenges, ...circuits].map((challenge) => ({ slug: challenge.slug }))
+  const [challenges, circuits, scripts] = await Promise.all([
+    getChallenges(),
+    getCircuitChallenges(),
+    getScriptChallenges(),
+  ])
+  return [...challenges, ...circuits, ...scripts].map((challenge) => ({ slug: challenge.slug }))
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
-  const challenge = (await getChallenge(slug)) ?? (await getCircuitChallenge(slug))
+  const challenge =
+    (await getChallenge(slug)) ??
+    (await getCircuitChallenge(slug)) ??
+    (await getScriptChallenge(slug))
   return challenge ? { title: challenge.name, description: challenge.summary } : {}
 }
 
@@ -49,6 +58,8 @@ export default async function ChallengePage({ params }: Props) {
   const { slug } = await params
   const circuit = await getCircuitChallenge(slug)
   if (circuit) return <CircuitPage challenge={circuit} />
+  const script = await getScriptChallenge(slug)
+  if (script) return <ScriptPage challenge={script} />
   const [challenge, scorecards, reviews, measurements, proofProgress] = await Promise.all([
     getChallenge(slug),
     getScorecards(slug),

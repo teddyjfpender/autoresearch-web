@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation"
 
 import { getCircuitChallenges } from "@/data/circuit/source"
+import { getScriptChallenges } from "@/data/script/source"
 import {
   getChallenge,
   getChallenges,
@@ -29,11 +30,12 @@ export const revalidate = 300
 
 export default async function HomePage() {
   const site = await getSite()
-  const [featured, featuredScorecards, challenges, circuits] = await Promise.all([
+  const [featured, featuredScorecards, challenges, circuits, scripts] = await Promise.all([
     getChallenge(site.featuredChallenge),
     getScorecards(site.featuredChallenge),
     getChallenges(),
     getCircuitChallenges(),
+    getScriptChallenges(),
   ])
   if (!featured) notFound()
   const entries = await Promise.all(
@@ -78,6 +80,7 @@ export default async function HomePage() {
         site={site}
         challenges={challenges}
         circuits={circuits}
+        scripts={scripts}
         featured={featured}
         summary={summarize(featured, featuredScorecards)}
         highlight={featuredEntry?.highlight ?? null}
@@ -87,6 +90,7 @@ export default async function HomePage() {
       <ChallengeShowcase
         entries={entries}
         circuits={circuits}
+        scripts={scripts}
         proposeUrl={featured.links.discussions}
       />
       <StepsSection

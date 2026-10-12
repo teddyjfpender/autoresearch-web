@@ -5,12 +5,14 @@ import { Reveal } from "@autoresearch/ui/motion/reveal"
 import { ArrowUpRight, Plus } from "lucide-react"
 
 import type { CircuitChallenge } from "@/data/circuit/schema"
+import type { ScriptChallenge } from "@/data/script/schema"
 import type { Challenge } from "@/data/schema"
 import type { CairoProgress, CandidateHighlight } from "@/lib/candidates"
 import { routes } from "@/lib/routes"
 
 import { StatusBadge } from "../challenge/status-badge"
 import { CircuitCard } from "./circuit-card"
+import { ScriptCard } from "./script-card"
 import { ShowcaseCard } from "./showcase-card"
 
 export interface ShowcaseEntry {
@@ -40,11 +42,14 @@ function ChallengeCard({ challenge, progress, highlight }: ShowcaseEntry) {
 export function ChallengeShowcase({
   entries,
   circuits,
+  scripts,
   proposeUrl,
 }: {
   entries: readonly ShowcaseEntry[]
   /** Circuit challenges, shown after the proving races. */
   circuits: readonly CircuitChallenge[]
+  /** Script challenges, shown after the circuit challenges. */
+  scripts: readonly ScriptChallenge[]
   proposeUrl: string
 }) {
   return (
@@ -81,6 +86,10 @@ export function ChallengeShowcase({
               ...circuits.map((challenge) => ({
                 id: challenge.slug,
                 content: <CircuitCard challenge={challenge} />,
+              })),
+              ...scripts.map((challenge) => ({
+                id: challenge.slug,
+                content: <ScriptCard challenge={challenge} />,
               })),
               {
                 id: "next-race",

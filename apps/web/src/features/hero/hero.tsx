@@ -9,6 +9,7 @@ import { SplitText } from "@autoresearch/ui/motion/split-text"
 import { ArrowRight, ArrowUpRight } from "lucide-react"
 
 import type { CircuitChallenge } from "@/data/circuit/schema"
+import type { ScriptChallenge } from "@/data/script/schema"
 import type { Challenge, Site } from "@/data/schema"
 import { routes } from "@/lib/routes"
 import type { Summary } from "@/lib/scoring"
@@ -21,6 +22,7 @@ export function Hero({
   site,
   challenges,
   circuits,
+  scripts,
   featured,
   summary,
   highlight,
@@ -31,6 +33,8 @@ export function Hero({
   challenges: readonly Challenge[]
   /** Circuit challenges; counted with the proving races. */
   circuits: readonly CircuitChallenge[]
+  /** Script challenges; counted with the others. */
+  scripts: readonly ScriptChallenge[]
   featured: Challenge
   summary: Summary
   highlight: CandidateHighlight | null
@@ -41,7 +45,7 @@ export function Hero({
   const primary = featured.tracks[0]
   const gpu = featured.contract.hardware.gpu
   const groups = [
-    ...new Set([...challenges, ...circuits].map((challenge) => challenge.group)),
+    ...new Set([...challenges, ...circuits, ...scripts].map((challenge) => challenge.group)),
   ].join(" · ")
   const validated = circuits.reduce(
     (total, challenge) =>
@@ -75,7 +79,7 @@ export function Hero({
   const figures = [
     {
       label: "Challenges",
-      value: formatNumber(challenges.length + circuits.length),
+      value: formatNumber(challenges.length + circuits.length + scripts.length),
       hint: groups,
     },
     progress

@@ -55,7 +55,7 @@ export function SiteHeader({
   name: string
   featuredSlug: string
   /** Participation targets by slug; the prompt only appears on a challenge's own pages. */
-  challenges: readonly (PromptChallenge & { slug: string; kind?: "circuit" })[]
+  challenges: readonly (PromptChallenge & { slug: string; kind?: "circuit" | "script" })[]
 }) {
   const pathname = usePathname()
   const current = challenges.find((challenge) => {
@@ -68,6 +68,7 @@ export function SiteHeader({
         pathname,
         featuredSlug,
         challenges.filter((challenge) => challenge.kind === "circuit").map(({ slug }) => slug),
+        challenges.filter((challenge) => challenge.kind === "script").map(({ slug }) => slug),
       ),
     [pathname, featuredSlug, challenges],
   )
